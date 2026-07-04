@@ -74,6 +74,15 @@
       border: 1px solid #000000;
       -webkit-user-drag: none;
     }
+
+    #counter {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      font-size: 16px;
+      color: #cccccc;
+      letter-spacing: 1px;
+    }
   </style>
 </head>
 <body>
@@ -83,6 +92,7 @@
       <img id="flag" alt="флаг">
     </div>
   </div>
+  <div id="counter"></div>
 
   <script>
     // ISO 3166-1 alpha-2 code + name in Bulgarian (uppercase applied via CSS).
@@ -285,15 +295,39 @@
 
     var nameEl = document.getElementById("name");
     var flagEl = document.getElementById("flag");
-    var lastIndex = -1;
+    var counterEl = document.getElementById("counter");
+    var total = countries.length;
 
-    function showRandom() {
-      var index;
-      // Avoid showing the same flag twice in a row.
-      do {
-        index = Math.floor(Math.random() * countries.length);
-      } while (index === lastIndex && countries.length > 1);
-      lastIndex = index;
+    var deck = [];       // shuffled order of country indices for the current cycle
+    var pos = 0;         // how many flags of the current cycle have been shown
+    var lastShown = -1;  // last country shown, to avoid an immediate repeat on reshuffle
+
+    // Fisher-Yates shuffle producing a random order that visits every country once.
+    function shuffle() {
+      deck = countries.map(function (_, i) { return i; });
+      for (var i = deck.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = deck[i];
+        deck[i] = deck[j];
+        deck[j] = tmp;
+      }
+      // Avoid repeating the previous flag as the first of the new cycle.
+      if (deck.length > 1 && deck[0] === lastShown) {
+        deck[0] = deck[1];
+        deck[1] = lastShown;
+      }
+      pos = 0;
+    }
+
+    function showNext() {
+      // When the whole world has been cycled through, reshuffle and start over.
+      if (pos >= deck.length) {
+        shuffle();
+      }
+
+      var index = deck[pos];
+      lastShown = index;
+      pos++;
 
       var country = countries[index];
       nameEl.textContent = country.name;
@@ -302,10 +336,12 @@
       flagEl.alt = "Знаме на " + country.name;
       // Nepal's flag is not rectangular, so a rectangular border looks wrong.
       flagEl.style.border = country.code === "np" ? "none" : "1px solid #000000";
+
+      counterEl.textContent = pos + "/" + total;
     }
 
-    document.body.addEventListener("click", showRandom);
-    showRandom();
+    document.body.addEventListener("click", showNext);
+    showNext();
   </script>
 </body>
 </html>
