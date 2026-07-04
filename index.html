@@ -300,6 +300,8 @@
       // High resolution flag, scaled into a fixed box for identical sizes.
       flagEl.src = "https://flagcdn.com/w640/" + country.code + ".png";
       flagEl.alt = "Знаме на " + country.name;
+      // Nepal's flag is not rectangular, so a rectangular border looks wrong.
+      flagEl.style.border = country.code === "np" ? "none" : "1px solid #000000";
     }
 
     document.body.addEventListener("click", showRandom);
