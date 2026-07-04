@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Игра с знамена</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      background: #ffffff;
+      color: #111111;
+      font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      overflow: hidden;
+    }
+
+    #game {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+    }
+
+    /* Country name is anchored to a fixed area so it never shifts. */
+    #name {
+      height: 90px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(24px, 5vw, 56px);
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      line-height: 1.1;
+      max-width: 90vw;
+    }
+
+    /* Fixed box so all flags render at an identical size. */
+    #flag-box {
+      width: 480px;
+      height: 320px;
+      max-width: 85vw;
+      max-height: 55vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 8px;
+    }
+
+    #flag {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    #hint {
+      margin-top: 32px;
+      font-size: 14px;
+      color: #999999;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="name">&nbsp;</div>
+    <div id="flag-box">
+      <img id="flag" alt="флаг">
+    </div>
+    <div id="hint">Кликнете за следващото знаме</div>
+  </div>
+
+  <script>
+    // ISO 3166-1 alpha-2 code + name in Bulgarian (uppercase applied via CSS).
+    var countries = [
+      { code: "af", name: "Афганистан" },
+      { code: "al", name: "Албания" },
+      { code: "dz", name: "Алжир" },
+      { code: "ad", name: "Андора" },
+      { code: "ao", name: "Ангола" },
+      { code: "ag", name: "Антигуа и Барбуда" },
+      { code: "ar", name: "Аржентина" },
+      { code: "am", name: "Армения" },
+      { code: "au", name: "Австралия" },
+      { code: "at", name: "Австрия" },
+      { code: "az", name: "Азербайджан" },
+      { code: "bs", name: "Бахамски острови" },
+      { code: "bh", name: "Бахрейн" },
+      { code: "bd", name: "Бангладеш" },
+      { code: "bb", name: "Барбадос" },
+      { code: "by", name: "Беларус" },
+      { code: "be", name: "Белгия" },
+      { code: "bz", name: "Белиз" },
+      { code: "bj", name: "Бенин" },
+      { code: "bt", name: "Бутан" },
+      { code: "bo", name: "Боливия" },
+      { code: "ba", name: "Босна и Херцеговина" },
+      { code: "bw", name: "Ботсвана" },
+      { code: "br", name: "Бразилия" },
+      { code: "bn", name: "Бруней" },
+      { code: "bg", name: "България" },
+      { code: "bf", name: "Буркина Фасо" },
+      { code: "bi", name: "Бурунди" },
+      { code: "cv", name: "Кабо Верде" },
+      { code: "kh", name: "Камбоджа" },
+      { code: "cm", name: "Камерун" },
+      { code: "ca", name: "Канада" },
+      { code: "cf", name: "Централноафриканска република" },
+      { code: "td", name: "Чад" },
+      { code: "cl", name: "Чили" },
+      { code: "cn", name: "Китай" },
+      { code: "co", name: "Колумбия" },
+      { code: "km", name: "Коморски острови" },
+      { code: "cg", name: "Конго" },
+      { code: "cd", name: "Демократична република Конго" },
+      { code: "cr", name: "Коста Рика" },
+      { code: "ci", name: "Кот д'Ивоар" },
+      { code: "hr", name: "Хърватия" },
+      { code: "cu", name: "Куба" },
+      { code: "cy", name: "Кипър" },
+      { code: "cz", name: "Чехия" },
+      { code: "dk", name: "Дания" },
+      { code: "dj", name: "Джибути" },
+      { code: "dm", name: "Доминика" },
+      { code: "do", name: "Доминиканска република" },
+      { code: "ec", name: "Еквадор" },
+      { code: "eg", name: "Египет" },
+      { code: "sv", name: "Салвадор" },
+      { code: "gq", name: "Екваториална Гвинея" },
+      { code: "er", name: "Еритрея" },
+      { code: "ee", name: "Естония" },
+      { code: "sz", name: "Есватини" },
+      { code: "et", name: "Етиопия" },
+      { code: "fj", name: "Фиджи" },
+      { code: "fi", name: "Финландия" },
+      { code: "fr", name: "Франция" },
+      { code: "ga", name: "Габон" },
+      { code: "gm", name: "Гамбия" },
+      { code: "ge", name: "Грузия" },
+      { code: "de", name: "Германия" },
+      { code: "gh", name: "Гана" },
+      { code: "gr", name: "Гърция" },
+      { code: "gd", name: "Гренада" },
+      { code: "gt", name: "Гватемала" },
+      { code: "gn", name: "Гвинея" },
+      { code: "gw", name: "Гвинея-Бисау" },
+      { code: "gy", name: "Гвиана" },
+      { code: "ht", name: "Хаити" },
+      { code: "hn", name: "Хондурас" },
+      { code: "hu", name: "Унгария" },
+      { code: "is", name: "Исландия" },
+      { code: "in", name: "Индия" },
+      { code: "id", name: "Индонезия" },
+      { code: "ir", name: "Иран" },
+      { code: "iq", name: "Ирак" },
+      { code: "ie", name: "Ирландия" },
+      { code: "il", name: "Израел" },
+      { code: "it", name: "Италия" },
+      { code: "jm", name: "Ямайка" },
+      { code: "jp", name: "Япония" },
+      { code: "jo", name: "Йордания" },
+      { code: "kz", name: "Казахстан" },
+      { code: "ke", name: "Кения" },
+      { code: "ki", name: "Кирибати" },
+      { code: "kp", name: "Северна Корея" },
+      { code: "kr", name: "Южна Корея" },
+      { code: "kw", name: "Кувейт" },
+      { code: "kg", name: "Киргизстан" },
+      { code: "la", name: "Лаос" },
+      { code: "lv", name: "Латвия" },
+      { code: "lb", name: "Ливан" },
+      { code: "ls", name: "Лесото" },
+      { code: "lr", name: "Либерия" },
+      { code: "ly", name: "Либия" },
+      { code: "li", name: "Лихтенщайн" },
+      { code: "lt", name: "Литва" },
+      { code: "lu", name: "Люксембург" },
+      { code: "mg", name: "Мадагаскар" },
+      { code: "mw", name: "Малави" },
+      { code: "my", name: "Малайзия" },
+      { code: "mv", name: "Малдиви" },
+      { code: "ml", name: "Мали" },
+      { code: "mt", name: "Малта" },
+      { code: "mh", name: "Маршалови острови" },
+      { code: "mr", name: "Мавритания" },
+      { code: "mu", name: "Мавриций" },
+      { code: "mx", name: "Мексико" },
+      { code: "fm", name: "Микронезия" },
+      { code: "md", name: "Молдова" },
+      { code: "mc", name: "Монако" },
+      { code: "mn", name: "Монголия" },
+      { code: "me", name: "Черна гора" },
+      { code: "ma", name: "Мароко" },
+      { code: "mz", name: "Мозамбик" },
+      { code: "mm", name: "Мианмар" },
+      { code: "na", name: "Намибия" },
+      { code: "nr", name: "Науру" },
+      { code: "np", name: "Непал" },
+      { code: "nl", name: "Нидерландия" },
+      { code: "nz", name: "Нова Зеландия" },
+      { code: "ni", name: "Никарагуа" },
+      { code: "ne", name: "Нигер" },
+      { code: "ng", name: "Нигерия" },
+      { code: "mk", name: "Северна Македония" },
+      { code: "no", name: "Норвегия" },
+      { code: "om", name: "Оман" },
+      { code: "pk", name: "Пакистан" },
+      { code: "pw", name: "Палау" },
+      { code: "pa", name: "Панама" },
+      { code: "pg", name: "Папуа Нова Гвинея" },
+      { code: "py", name: "Парагвай" },
+      { code: "pe", name: "Перу" },
+      { code: "ph", name: "Филипини" },
+      { code: "pl", name: "Полша" },
+      { code: "pt", name: "Португалия" },
+      { code: "qa", name: "Катар" },
+      { code: "ro", name: "Румъния" },
+      { code: "ru", name: "Русия" },
+      { code: "rw", name: "Руанда" },
+      { code: "kn", name: "Сейнт Китс и Невис" },
+      { code: "lc", name: "Сейнт Лусия" },
+      { code: "vc", name: "Сейнт Винсент и Гренадини" },
+      { code: "ws", name: "Самоа" },
+      { code: "sm", name: "Сан Марино" },
+      { code: "st", name: "Сао Томе и Принсипи" },
+      { code: "sa", name: "Саудитска Арабия" },
+      { code: "sn", name: "Сенегал" },
+      { code: "rs", name: "Сърбия" },
+      { code: "sc", name: "Сейшели" },
+      { code: "sl", name: "Сиера Леоне" },
+      { code: "sg", name: "Сингапур" },
+      { code: "sk", name: "Словакия" },
+      { code: "si", name: "Словения" },
+      { code: "sb", name: "Соломонови острови" },
+      { code: "so", name: "Сомалия" },
+      { code: "za", name: "Южна Африка" },
+      { code: "ss", name: "Южен Судан" },
+      { code: "es", name: "Испания" },
+      { code: "lk", name: "Шри Ланка" },
+      { code: "sd", name: "Судан" },
+      { code: "sr", name: "Суринам" },
+      { code: "se", name: "Швеция" },
+      { code: "ch", name: "Швейцария" },
+      { code: "sy", name: "Сирия" },
+      { code: "tj", name: "Таджикистан" },
+      { code: "tz", name: "Танзания" },
+      { code: "th", name: "Тайланд" },
+      { code: "tl", name: "Източен Тимор" },
+      { code: "tg", name: "Того" },
+      { code: "to", name: "Тонга" },
+      { code: "tt", name: "Тринидад и Тобаго" },
+      { code: "tn", name: "Тунис" },
+      { code: "tr", name: "Турция" },
+      { code: "tm", name: "Туркменистан" },
+      { code: "tv", name: "Тувалу" },
+      { code: "ug", name: "Уганда" },
+      { code: "ua", name: "Украйна" },
+      { code: "ae", name: "Обединени арабски емирства" },
+      { code: "gb", name: "Обединено кралство" },
+      { code: "us", name: "Съединени американски щати" },
+      { code: "uy", name: "Уругвай" },
+      { code: "uz", name: "Узбекистан" },
+      { code: "vu", name: "Вануату" },
+      { code: "va", name: "Ватикана" },
+      { code: "ve", name: "Венецуела" },
+      { code: "vn", name: "Виетнам" },
+      { code: "ye", name: "Йемен" },
+      { code: "zm", name: "Замбия" },
+      { code: "zw", name: "Зимбабве" }
+    ];
+
+    var nameEl = document.getElementById("name");
+    var flagEl = document.getElementById("flag");
+    var lastIndex = -1;
+
+    function showRandom() {
+      var index;
+      // Avoid showing the same flag twice in a row.
+      do {
+        index = Math.floor(Math.random() * countries.length);
+      } while (index === lastIndex && countries.length > 1);
+      lastIndex = index;
+
+      var country = countries[index];
+      nameEl.textContent = country.name;
+      // High resolution flag, scaled into a fixed box for identical sizes.
+      flagEl.src = "https://flagcdn.com/w640/" + country.code + ".png";
+      flagEl.alt = "Знаме на " + country.name;
+    }
+
+    document.body.addEventListener("click", showRandom);
+    showRandom();
+  </script>
+</body>
+</html>
