@@ -26,6 +26,8 @@
       cursor: pointer;
       user-select: none;
       -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
       overflow: hidden;
     }
 
@@ -68,13 +70,7 @@
       width: 100%;
       height: 100%;
       object-fit: contain;
-    }
-
-    #hint {
-      margin-top: 32px;
-      font-size: 14px;
-      color: #999999;
-      letter-spacing: 0.5px;
+      -webkit-user-drag: none;
     }
   </style>
 </head>
@@ -84,7 +80,6 @@
     <div id="flag-box">
       <img id="flag" alt="флаг">
     </div>
-    <div id="hint">Кликнете за следващото знаме</div>
   </div>
 
   <script>
