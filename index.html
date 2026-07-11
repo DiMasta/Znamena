@@ -84,9 +84,46 @@
       color: #999999;
       letter-spacing: 1px;
     }
+
+    /* Control bar pinned to the top, above the phone's safe area. */
+    #controls {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      padding-top: calc(14px + env(safe-area-inset-top, 0px));
+      padding-bottom: 14px;
+      z-index: 10;
+    }
+
+    .ctrl {
+      -webkit-tap-highlight-color: transparent;
+      border: 1px solid #dddddd;
+      background: #f5f5f5;
+      color: #333333;
+      border-radius: 12px;
+      padding: 12px 20px;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .ctrl:active {
+      background: #e2e2e2;
+    }
   </style>
 </head>
 <body>
+  <div id="controls">
+    <button id="prev" class="ctrl" type="button" aria-label="Предишно знаме">‹</button>
+    <button id="restart" class="ctrl" type="button" aria-label="Започни отначало">↺</button>
+    <button id="next" class="ctrl" type="button" aria-label="Следващо знаме">›</button>
+  </div>
   <div id="game">
     <div id="name">&nbsp;</div>
     <div id="flag-box">
@@ -298,13 +335,14 @@
     var flagEl = document.getElementById("flag");
     var counterEl = document.getElementById("counter");
     var total = countries.length;
+    var STORAGE_KEY = "flagsGame.v1";
 
-    var deck = [];       // shuffled order of country indices for the current cycle
-    var pos = 0;         // how many flags of the current cycle have been shown
-    var lastShown = -1;  // last country shown, to avoid an immediate repeat on reshuffle
+    var deck = [];  // shuffled order of country indices for the current cycle
+    var pos = 0;    // index in the deck of the flag currently on screen
 
     // Fisher-Yates shuffle producing a random order that visits every country once.
-    function shuffle() {
+    // If avoidFirst is given, ensures the new deck does not start with that country.
+    function shuffle(avoidFirst) {
       deck = countries.map(function (_, i) { return i; });
       for (var i = deck.length - 1; i > 0; i--) {
         var j = Math.floor(Math.random() * (i + 1));
@@ -312,37 +350,95 @@
         deck[i] = deck[j];
         deck[j] = tmp;
       }
-      // Avoid repeating the previous flag as the first of the new cycle.
-      if (deck.length > 1 && deck[0] === lastShown) {
+      if (deck.length > 1 && deck[0] === avoidFirst) {
         deck[0] = deck[1];
-        deck[1] = lastShown;
+        deck[1] = avoidFirst;
       }
       pos = 0;
     }
 
-    function showNext() {
-      // When the whole world has been cycled through, reshuffle and start over.
-      if (pos >= deck.length) {
-        shuffle();
+    // Persist the current deck and position so the game resumes where it left off.
+    function save() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ deck: deck, pos: pos }));
+      } catch (e) { /* storage unavailable */ }
+    }
+
+    // Restore a saved session; returns true only if the saved data is still valid.
+    function load() {
+      try {
+        var data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (!data || !Array.isArray(data.deck) || data.deck.length !== total) return false;
+        for (var i = 0; i < data.deck.length; i++) {
+          if (typeof data.deck[i] !== "number" || data.deck[i] < 0 || data.deck[i] >= total) return false;
+        }
+        if (typeof data.pos !== "number" || data.pos < 0 || data.pos >= data.deck.length) return false;
+        deck = data.deck;
+        pos = data.pos;
+        return true;
+      } catch (e) {
+        return false;
       }
+    }
 
-      var index = deck[pos];
-      lastShown = index;
-      pos++;
-
-      var country = countries[index];
+    // Draw the flag at the current position and save progress.
+    function render() {
+      var country = countries[deck[pos]];
       nameEl.textContent = country.name;
       // High resolution flag, scaled into a fixed box for identical sizes.
       flagEl.src = "https://flagcdn.com/w640/" + country.code + ".png";
       flagEl.alt = "Знаме на " + country.name;
       // Nepal's flag is not rectangular, so a rectangular border looks wrong.
       flagEl.style.border = country.code === "np" ? "none" : "1px solid #000000";
-
-      counterEl.textContent = pos + "/" + total;
+      counterEl.textContent = (pos + 1) + "/" + total;
+      save();
     }
 
-    document.body.addEventListener("click", showNext);
-    showNext();
+    function next() {
+      if (pos < deck.length - 1) {
+        pos++;
+      } else {
+        // Whole world cycled through: reshuffle and start a new cycle.
+        shuffle(deck[pos]);
+      }
+      render();
+    }
+
+    function prev() {
+      if (pos > 0) {
+        pos--;
+        render();
+      }
+    }
+
+    function restart() {
+      shuffle(deck.length ? deck[pos] : -1);
+      render();
+    }
+
+    // Buttons act on their own; stop the tap from also triggering "next".
+    function bindButton(id, action) {
+      document.getElementById(id).addEventListener("click", function (e) {
+        e.stopPropagation();
+        action();
+      });
+    }
+    bindButton("prev", prev);
+    bindButton("next", next);
+    bindButton("restart", restart);
+    // Taps on the control bar background should not advance either.
+    document.getElementById("controls").addEventListener("click", function (e) {
+      e.stopPropagation();
+    });
+
+    // Tapping anywhere else on the screen goes to the next flag.
+    document.body.addEventListener("click", next);
+
+    // Resume the previous session, or start a fresh shuffled cycle.
+    if (!load()) {
+      shuffle(-1);
+    }
+    render();
   </script>
 </body>
 </html>
