@@ -2,7 +2,7 @@
 <html lang="bg">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Игра с знамена</title>
   <style>
     * {
@@ -37,10 +37,25 @@
       justify-content: center;
       text-align: center;
       padding: 24px;
+      /* Space reserved for the top control bar and the bottom counter. */
+      --top: calc(76px + env(safe-area-inset-top, 0px));
+      --bottom: calc(56px + env(safe-area-inset-bottom, 0px));
     }
 
     .hidden {
       display: none;
+    }
+
+    button {
+      font-family: inherit;
+      -webkit-tap-highlight-color: transparent;
+      cursor: pointer;
+      transition: transform 0.08s ease, background-color 0.08s ease;
+    }
+
+    /* Press feedback: buttons shrink and darken while held. */
+    button.pressed {
+      transform: scale(0.92);
     }
 
     /* ---- Main menu ---- */
@@ -61,7 +76,6 @@
     }
 
     .menu-btn {
-      -webkit-tap-highlight-color: transparent;
       border: 2px solid #111111;
       background: #ffffff;
       color: #111111;
@@ -69,81 +83,20 @@
       padding: 20px 24px;
       font-size: 22px;
       font-weight: 700;
-      cursor: pointer;
-      font-family: inherit;
       text-transform: uppercase;
       letter-spacing: 1px;
     }
 
-    .menu-btn:active {
-      background: #f0f0f0;
+    .menu-btn.pressed {
+      background: #e6e6e6;
     }
 
-    /* Classic game is tappable anywhere to advance. */
-    #classic {
-      cursor: pointer;
-    }
-
-    #game {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 24px;
-    }
-
-    /* Country name is anchored to a fixed area so it never shifts. */
-    #name {
-      height: 90px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: clamp(24px, 5vw, 56px);
-      font-weight: 700;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      line-height: 1.1;
-      max-width: 90vw;
-    }
-
-    /* Fixed box so all flags render at an identical size. */
-    #flag-box {
-      width: 480px;
-      height: 320px;
-      max-width: 85vw;
-      max-height: 55vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-top: 8px;
-    }
-
-    #flag {
-      max-width: 100%;
-      max-height: 100%;
-      width: auto;
-      height: auto;
-      border: 1px solid #000000;
-      -webkit-user-drag: none;
-    }
-
-    #counter {
-      position: fixed;
-      left: 20px;
-      bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-      font-size: 20px;
-      font-weight: 600;
-      color: #999999;
-      letter-spacing: 1px;
-    }
-
-    /* Control bar pinned to the top, above the phone's safe area. */
+    /* ---- Top control bar and bottom counter, shared by the variants ---- */
     .controls {
       position: fixed;
       top: 0;
-      left: 0;
-      right: 0;
+      left: 50%;
+      transform: translateX(-50%);
       display: flex;
       justify-content: center;
       gap: 16px;
@@ -153,29 +106,241 @@
     }
 
     .ctrl {
-      -webkit-tap-highlight-color: transparent;
       border: 1px solid #dddddd;
       background: #f5f5f5;
       color: #333333;
       border-radius: 12px;
-      padding: 12px 20px;
+      height: 48px;
+      min-width: 58px;
+      padding: 0 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-size: 22px;
       font-weight: 700;
       line-height: 1;
+    }
+
+    .ctrl.pressed {
+      background: #d4d4d4;
+    }
+
+    .counter {
+      position: fixed;
+      left: 20px;
+      bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+      font-size: 20px;
+      font-weight: 600;
+      color: #999999;
+      letter-spacing: 1px;
+    }
+
+    /* A flag inside a fixed box: identical footprint, border hugs the flag. */
+    .flag-box {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 3 / 2;
+    }
+
+    .flag-box img {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      border: 1px solid #000000;
+      -webkit-user-drag: none;
+    }
+
+    /* Nepal's flag is not rectangular, so a rectangular border looks wrong. */
+    .flag-box img.no-border {
+      border: none;
+    }
+
+    /* ---- Classic ---- */
+    #classic {
       cursor: pointer;
-      font-family: inherit;
+      padding: var(--top) 16px var(--bottom);
+      --name-fs: clamp(22px, 6.5vmin, 46px);
     }
 
-    .ctrl:active {
-      background: #e2e2e2;
-    }
-
-    /* ---- Placeholder for the upcoming variant ---- */
-    .placeholder {
-      font-size: clamp(20px, 5vw, 32px);
+    /* Country name is anchored to a fixed area so it never shifts. */
+    #name {
+      height: calc(var(--name-fs) * 2.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: var(--name-fs);
       font-weight: 700;
-      color: #555555;
-      max-width: 80vw;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      line-height: 1.1;
+      max-width: 92vw;
+    }
+
+    #name.long {
+      font-size: calc(var(--name-fs) * 0.78);
+    }
+
+    /* Flag size follows whichever is tighter: the width or the free height. */
+    #flag-box {
+      margin-top: 8px;
+      width: min(560px, 92vw, calc((100vh - var(--top) - var(--bottom) - var(--name-fs) * 2.4 - 16px) * 1.5));
+      width: min(560px, 92vw, calc((100dvh - var(--top) - var(--bottom) - var(--name-fs) * 2.4 - 16px) * 1.5));
+    }
+
+    /* ---- Master (quiz) ---- */
+    #master {
+      padding: var(--top) 16px var(--bottom);
+    }
+
+    #quiz {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      max-width: 560px;
+      height: 100%;
+    }
+
+    /* The question takes all space left over by the answer grid. */
+    #prompt {
+      flex: 1 1 0;
+      min-height: 0;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tag {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: #888888;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .q-text {
+      font-size: clamp(22px, 6.5vmin, 44px);
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      line-height: 1.15;
+    }
+
+    /* Capitals are marked with a star, a tag and a distinct colour. */
+    .q-text.capital {
+      color: #1d4ed8;
+    }
+
+    .q-text.capital::before {
+      content: "★ ";
+      color: #f5a524;
+    }
+
+    #map {
+      position: relative;
+      flex: 1 1 0;
+      min-height: 0;
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    #map svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #options {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      width: 100%;
+    }
+
+    .option {
+      border: 3px solid transparent;
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      color: #111111;
+    }
+
+    .option .flag-box {
+      width: 100%;
+    }
+
+    .option.pressed {
+      background: #f0f0f0;
+    }
+
+    .opt-label {
+      min-height: 1.2em;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      line-height: 1.2;
+      visibility: hidden;
+    }
+
+    .answered .opt-label {
+      visibility: visible;
+    }
+
+    .option.correct {
+      border-color: #2e7d32;
+      background: #e8f5e9;
+    }
+
+    .option.wrong {
+      border-color: #c62828;
+      background: #ffebee;
+      animation: shake 0.3s;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-6px); }
+      75% { transform: translateX(6px); }
+    }
+
+    .loading {
+      color: #999999;
+      font-size: 18px;
+    }
+
+    /* Phones held sideways: question on the left, answers on the right. */
+    @media (orientation: landscape) and (max-height: 600px) {
+      #quiz {
+        flex-direction: row;
+        max-width: none;
+      }
+
+      #prompt {
+        height: 100%;
+      }
+
+      #options {
+        width: min(50%, calc((100vh - var(--top) - var(--bottom) - 70px) * 1.5));
+        width: min(50%, calc((100dvh - var(--top) - var(--bottom) - 70px) * 1.5));
+      }
+
+      .option {
+        padding: 4px;
+      }
     }
   </style>
 </head>
@@ -185,7 +350,7 @@
     <h1 class="menu-title">Знамена</h1>
     <div class="menu-buttons">
       <button class="menu-btn" type="button" data-go="classic">Класически</button>
-      <button class="menu-btn" type="button" data-go="randomall">Случайни всички</button>
+      <button class="menu-btn" type="button" data-go="master">Майстор</button>
     </div>
   </section>
 
@@ -197,359 +362,29 @@
       <button id="restart" class="ctrl" type="button" aria-label="Започни отначало">↺</button>
       <button id="next" class="ctrl" type="button" aria-label="Следващо знаме">›</button>
     </div>
-    <div id="game">
-      <div id="name">&nbsp;</div>
-      <div id="flag-box">
-        <img id="flag" alt="флаг">
-      </div>
+    <div id="name">&nbsp;</div>
+    <div id="flag-box" class="flag-box">
+      <img id="flag" alt="флаг">
     </div>
-    <div id="counter"></div>
+    <div id="counter" class="counter"></div>
   </section>
 
-  <!-- Random all variant (gameplay to be defined) -->
-  <section id="randomall" class="screen hidden">
+  <!-- Master variant: pick the right flag out of four -->
+  <section id="master" class="screen hidden">
     <div class="controls">
       <button class="ctrl" type="button" data-go="menu" aria-label="Меню">⌂</button>
+      <button id="m-restart" class="ctrl" type="button" aria-label="Започни отначало">↺</button>
+      <button id="m-next" class="ctrl" type="button" aria-label="Следващ въпрос">›</button>
     </div>
-    <div class="placeholder">Случайни всички<br>— очаквайте скоро</div>
+    <div id="quiz">
+      <div id="prompt"></div>
+      <div id="options"></div>
+    </div>
+    <div id="score" class="counter"></div>
   </section>
 
-  <script>
-    // ISO 3166-1 alpha-2 code + name in Bulgarian (uppercase applied via CSS).
-    var countries = [
-      { code: "af", name: "Афганистан" },
-      { code: "al", name: "Албания" },
-      { code: "dz", name: "Алжир" },
-      { code: "ad", name: "Андора" },
-      { code: "ao", name: "Ангола" },
-      { code: "ag", name: "Антигуа и Барбуда" },
-      { code: "ar", name: "Аржентина" },
-      { code: "am", name: "Армения" },
-      { code: "au", name: "Австралия" },
-      { code: "at", name: "Австрия" },
-      { code: "az", name: "Азербайджан" },
-      { code: "bs", name: "Бахамски острови" },
-      { code: "bh", name: "Бахрейн" },
-      { code: "bd", name: "Бангладеш" },
-      { code: "bb", name: "Барбадос" },
-      { code: "by", name: "Беларус" },
-      { code: "be", name: "Белгия" },
-      { code: "bz", name: "Белиз" },
-      { code: "bj", name: "Бенин" },
-      { code: "bt", name: "Бутан" },
-      { code: "bo", name: "Боливия" },
-      { code: "ba", name: "Босна и Херцеговина" },
-      { code: "bw", name: "Ботсвана" },
-      { code: "br", name: "Бразилия" },
-      { code: "bn", name: "Бруней" },
-      { code: "bg", name: "България" },
-      { code: "bf", name: "Буркина Фасо" },
-      { code: "bi", name: "Бурунди" },
-      { code: "cv", name: "Кабо Верде" },
-      { code: "kh", name: "Камбоджа" },
-      { code: "cm", name: "Камерун" },
-      { code: "ca", name: "Канада" },
-      { code: "cf", name: "Централноафриканска република" },
-      { code: "td", name: "Чад" },
-      { code: "cl", name: "Чили" },
-      { code: "cn", name: "Китай" },
-      { code: "co", name: "Колумбия" },
-      { code: "km", name: "Коморски острови" },
-      { code: "cg", name: "Конго" },
-      { code: "cd", name: "Демократична република Конго" },
-      { code: "cr", name: "Коста Рика" },
-      { code: "ci", name: "Кот д'Ивоар" },
-      { code: "hr", name: "Хърватия" },
-      { code: "cu", name: "Куба" },
-      { code: "cy", name: "Кипър" },
-      { code: "cz", name: "Чехия" },
-      { code: "dk", name: "Дания" },
-      { code: "dj", name: "Джибути" },
-      { code: "dm", name: "Доминика" },
-      { code: "do", name: "Доминиканска република" },
-      { code: "ec", name: "Еквадор" },
-      { code: "eg", name: "Египет" },
-      { code: "sv", name: "Салвадор" },
-      { code: "gq", name: "Екваториална Гвинея" },
-      { code: "er", name: "Еритрея" },
-      { code: "ee", name: "Естония" },
-      { code: "sz", name: "Есватини" },
-      { code: "et", name: "Етиопия" },
-      { code: "fj", name: "Фиджи" },
-      { code: "fi", name: "Финландия" },
-      { code: "fr", name: "Франция" },
-      { code: "ga", name: "Габон" },
-      { code: "gm", name: "Гамбия" },
-      { code: "ge", name: "Грузия" },
-      { code: "de", name: "Германия" },
-      { code: "gh", name: "Гана" },
-      { code: "gr", name: "Гърция" },
-      { code: "gd", name: "Гренада" },
-      { code: "gt", name: "Гватемала" },
-      { code: "gn", name: "Гвинея" },
-      { code: "gw", name: "Гвинея-Бисау" },
-      { code: "gy", name: "Гвиана" },
-      { code: "ht", name: "Хаити" },
-      { code: "hn", name: "Хондурас" },
-      { code: "hu", name: "Унгария" },
-      { code: "is", name: "Исландия" },
-      { code: "in", name: "Индия" },
-      { code: "id", name: "Индонезия" },
-      { code: "ir", name: "Иран" },
-      { code: "iq", name: "Ирак" },
-      { code: "ie", name: "Ирландия" },
-      { code: "il", name: "Израел" },
-      { code: "it", name: "Италия" },
-      { code: "jm", name: "Ямайка" },
-      { code: "jp", name: "Япония" },
-      { code: "jo", name: "Йордания" },
-      { code: "kz", name: "Казахстан" },
-      { code: "ke", name: "Кения" },
-      { code: "ki", name: "Кирибати" },
-      { code: "kp", name: "Северна Корея" },
-      { code: "kr", name: "Южна Корея" },
-      { code: "kw", name: "Кувейт" },
-      { code: "kg", name: "Киргизстан" },
-      { code: "la", name: "Лаос" },
-      { code: "lv", name: "Латвия" },
-      { code: "lb", name: "Ливан" },
-      { code: "ls", name: "Лесото" },
-      { code: "lr", name: "Либерия" },
-      { code: "ly", name: "Либия" },
-      { code: "li", name: "Лихтенщайн" },
-      { code: "lt", name: "Литва" },
-      { code: "lu", name: "Люксембург" },
-      { code: "mg", name: "Мадагаскар" },
-      { code: "mw", name: "Малави" },
-      { code: "my", name: "Малайзия" },
-      { code: "mv", name: "Малдиви" },
-      { code: "ml", name: "Мали" },
-      { code: "mt", name: "Малта" },
-      { code: "mh", name: "Маршалови острови" },
-      { code: "mr", name: "Мавритания" },
-      { code: "mu", name: "Мавриций" },
-      { code: "mx", name: "Мексико" },
-      { code: "fm", name: "Микронезия" },
-      { code: "md", name: "Молдова" },
-      { code: "mc", name: "Монако" },
-      { code: "mn", name: "Монголия" },
-      { code: "me", name: "Черна гора" },
-      { code: "ma", name: "Мароко" },
-      { code: "mz", name: "Мозамбик" },
-      { code: "mm", name: "Мианмар" },
-      { code: "na", name: "Намибия" },
-      { code: "nr", name: "Науру" },
-      { code: "np", name: "Непал" },
-      { code: "nl", name: "Нидерландия" },
-      { code: "nz", name: "Нова Зеландия" },
-      { code: "ni", name: "Никарагуа" },
-      { code: "ne", name: "Нигер" },
-      { code: "ng", name: "Нигерия" },
-      { code: "mk", name: "Северна Македония" },
-      { code: "no", name: "Норвегия" },
-      { code: "om", name: "Оман" },
-      { code: "pk", name: "Пакистан" },
-      { code: "pw", name: "Палау" },
-      { code: "pa", name: "Панама" },
-      { code: "pg", name: "Папуа Нова Гвинея" },
-      { code: "py", name: "Парагвай" },
-      { code: "pe", name: "Перу" },
-      { code: "ph", name: "Филипини" },
-      { code: "pl", name: "Полша" },
-      { code: "pt", name: "Португалия" },
-      { code: "qa", name: "Катар" },
-      { code: "ro", name: "Румъния" },
-      { code: "ru", name: "Русия" },
-      { code: "rw", name: "Руанда" },
-      { code: "kn", name: "Сейнт Китс и Невис" },
-      { code: "lc", name: "Сейнт Лусия" },
-      { code: "vc", name: "Сейнт Винсент и Гренадини" },
-      { code: "ws", name: "Самоа" },
-      { code: "sm", name: "Сан Марино" },
-      { code: "st", name: "Сао Томе и Принсипи" },
-      { code: "sa", name: "Саудитска Арабия" },
-      { code: "sn", name: "Сенегал" },
-      { code: "rs", name: "Сърбия" },
-      { code: "sc", name: "Сейшели" },
-      { code: "sl", name: "Сиера Леоне" },
-      { code: "sg", name: "Сингапур" },
-      { code: "sk", name: "Словакия" },
-      { code: "si", name: "Словения" },
-      { code: "sb", name: "Соломонови острови" },
-      { code: "so", name: "Сомалия" },
-      { code: "za", name: "Южна Африка" },
-      { code: "ss", name: "Южен Судан" },
-      { code: "es", name: "Испания" },
-      { code: "lk", name: "Шри Ланка" },
-      { code: "sd", name: "Судан" },
-      { code: "sr", name: "Суринам" },
-      { code: "se", name: "Швеция" },
-      { code: "ch", name: "Швейцария" },
-      { code: "sy", name: "Сирия" },
-      { code: "tj", name: "Таджикистан" },
-      { code: "tz", name: "Танзания" },
-      { code: "th", name: "Тайланд" },
-      { code: "tl", name: "Източен Тимор" },
-      { code: "tg", name: "Того" },
-      { code: "to", name: "Тонга" },
-      { code: "tt", name: "Тринидад и Тобаго" },
-      { code: "tn", name: "Тунис" },
-      { code: "tr", name: "Турция" },
-      { code: "tm", name: "Туркменистан" },
-      { code: "tv", name: "Тувалу" },
-      { code: "ug", name: "Уганда" },
-      { code: "ua", name: "Украйна" },
-      { code: "ae", name: "Обединени арабски емирства" },
-      { code: "gb", name: "Обединено кралство" },
-      { code: "us", name: "Съединени американски щати" },
-      { code: "uy", name: "Уругвай" },
-      { code: "uz", name: "Узбекистан" },
-      { code: "vu", name: "Вануату" },
-      { code: "va", name: "Ватикана" },
-      { code: "ve", name: "Венецуела" },
-      { code: "vn", name: "Виетнам" },
-      { code: "ye", name: "Йемен" },
-      { code: "zm", name: "Замбия" },
-      { code: "zw", name: "Зимбабве" }
-    ];
-
-    var nameEl = document.getElementById("name");
-    var flagEl = document.getElementById("flag");
-    var counterEl = document.getElementById("counter");
-    var total = countries.length;
-    var STORAGE_KEY = "flagsGame.v1";
-
-    var deck = [];  // shuffled order of country indices for the current cycle
-    var pos = 0;    // index in the deck of the flag currently on screen
-
-    // Fisher-Yates shuffle producing a random order that visits every country once.
-    // If avoidFirst is given, ensures the new deck does not start with that country.
-    function shuffle(avoidFirst) {
-      deck = countries.map(function (_, i) { return i; });
-      for (var i = deck.length - 1; i > 0; i--) {
-        var j = Math.floor(Math.random() * (i + 1));
-        var tmp = deck[i];
-        deck[i] = deck[j];
-        deck[j] = tmp;
-      }
-      if (deck.length > 1 && deck[0] === avoidFirst) {
-        deck[0] = deck[1];
-        deck[1] = avoidFirst;
-      }
-      pos = 0;
-    }
-
-    // Persist the current deck and position so the game resumes where it left off.
-    function save() {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ deck: deck, pos: pos }));
-      } catch (e) { /* storage unavailable */ }
-    }
-
-    // Restore a saved session; returns true only if the saved data is still valid.
-    function load() {
-      try {
-        var data = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        if (!data || !Array.isArray(data.deck) || data.deck.length !== total) return false;
-        for (var i = 0; i < data.deck.length; i++) {
-          if (typeof data.deck[i] !== "number" || data.deck[i] < 0 || data.deck[i] >= total) return false;
-        }
-        if (typeof data.pos !== "number" || data.pos < 0 || data.pos >= data.deck.length) return false;
-        deck = data.deck;
-        pos = data.pos;
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
-
-    // Draw the flag at the current position and save progress.
-    function render() {
-      var country = countries[deck[pos]];
-      nameEl.textContent = country.name;
-      // High resolution flag, scaled into a fixed box for identical sizes.
-      flagEl.src = "https://flagcdn.com/w640/" + country.code + ".png";
-      flagEl.alt = "Знаме на " + country.name;
-      // Nepal's flag is not rectangular, so a rectangular border looks wrong.
-      flagEl.style.border = country.code === "np" ? "none" : "1px solid #000000";
-      counterEl.textContent = (pos + 1) + "/" + total;
-      save();
-    }
-
-    function next() {
-      if (pos < deck.length - 1) {
-        pos++;
-      } else {
-        // Whole world cycled through: reshuffle and start a new cycle.
-        shuffle(deck[pos]);
-      }
-      render();
-    }
-
-    function prev() {
-      if (pos > 0) {
-        pos--;
-        render();
-      }
-    }
-
-    function restart() {
-      shuffle(deck.length ? deck[pos] : -1);
-      render();
-    }
-
-    // Buttons act on their own; stop the tap from also triggering "next".
-    function bindButton(id, action) {
-      document.getElementById(id).addEventListener("click", function (e) {
-        e.stopPropagation();
-        action();
-      });
-    }
-    bindButton("prev", prev);
-    bindButton("next", next);
-    bindButton("restart", restart);
-
-    // ---- Screen routing ----
-    var screens = {
-      menu: document.getElementById("menu"),
-      classic: document.getElementById("classic"),
-      randomall: document.getElementById("randomall")
-    };
-
-    function showScreen(name) {
-      for (var key in screens) {
-        screens[key].classList.toggle("hidden", key !== name);
-      }
-    }
-
-    // Any element with data-go navigates to that screen (menu entries + home buttons).
-    var navButtons = document.querySelectorAll("[data-go]");
-    for (var n = 0; n < navButtons.length; n++) {
-      navButtons[n].addEventListener("click", function (e) {
-        e.stopPropagation();
-        showScreen(this.getAttribute("data-go"));
-      });
-    }
-
-    // Taps on a control bar background should not advance the flag.
-    var bars = document.querySelectorAll(".controls");
-    for (var b = 0; b < bars.length; b++) {
-      bars[b].addEventListener("click", function (e) {
-        e.stopPropagation();
-      });
-    }
-
-    // Tapping anywhere on the classic screen goes to the next flag.
-    document.getElementById("classic").addEventListener("click", next);
-
-    // Resume the previous classic session, or start a fresh shuffled cycle.
-    if (!load()) {
-      shuffle(-1);
-    }
-    render();
-
-    // Start on the main menu.
-    showScreen("menu");
-  </script>
+  <script src="countries.js?v=8"></script>
+  <script src="vendor/geo.min.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
