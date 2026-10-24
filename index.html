@@ -191,7 +191,7 @@
 
     /* ---- Master (quiz) ---- */
     #master {
-      padding: var(--top) 16px var(--bottom);
+      padding: var(--top) 16px calc(16px + env(safe-area-inset-bottom, 0px));
     }
 
     #quiz {
@@ -322,8 +322,30 @@
       font-size: 18px;
     }
 
-    /* Phones held sideways: question on the left, answers on the right. */
+    /* Phones held sideways: the screen is short, so the control buttons move
+       to a column on the right and the content uses the full height. */
     @media (orientation: landscape) and (max-height: 600px) {
+      .screen {
+        --top: 12px;
+        --bottom: 12px;
+      }
+
+      .controls {
+        top: 50%;
+        left: auto;
+        right: calc(12px + env(safe-area-inset-right, 0px));
+        transform: translateY(-50%);
+        flex-direction: column;
+        gap: 10px;
+        padding: 0;
+      }
+
+      #classic,
+      #master {
+        padding: 12px calc(84px + env(safe-area-inset-right, 0px)) 12px calc(16px + env(safe-area-inset-left, 0px));
+      }
+
+      /* Question on the left, answers on the right. */
       #quiz {
         flex-direction: row;
         max-width: none;
@@ -334,12 +356,18 @@
       }
 
       #options {
-        width: min(50%, calc((100vh - var(--top) - var(--bottom) - 70px) * 1.5));
-        width: min(50%, calc((100dvh - var(--top) - var(--bottom) - 70px) * 1.5));
+        width: min(60%, calc((100vh - 80px) * 1.5));
+        width: min(60%, calc((100dvh - 80px) * 1.5));
+        gap: 6px 10px;
       }
 
       .option {
-        padding: 4px;
+        padding: 3px;
+        gap: 2px;
+      }
+
+      .opt-label {
+        font-size: 11px;
       }
     }
   </style>
@@ -380,11 +408,10 @@
       <div id="prompt"></div>
       <div id="options"></div>
     </div>
-    <div id="score" class="counter"></div>
   </section>
 
-  <script src="countries.js?v=8"></script>
-  <script src="vendor/geo.min.js?v=8"></script>
-  <script src="app.js?v=8"></script>
+  <script src="countries.js?v=9"></script>
+  <script src="vendor/geo.min.js?v=9"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

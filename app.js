@@ -219,21 +219,14 @@ var master = (function () {
   var screenEl = document.getElementById("master");
   var promptEl = document.getElementById("prompt");
   var optionsEl = document.getElementById("options");
-  var scoreEl = document.getElementById("score");
 
   var deck = [];
   var pos = 0;
-  var correct = 0;    // questions answered right
-  var answered = 0;   // questions answered in total
   var question = null;
   var advanceTimer = null;
 
   function save() {
-    saveState(STORAGE_KEY, { deck: deck, pos: pos, correct: correct, answered: answered });
-  }
-
-  function updateScore() {
-    scoreEl.textContent = "✓ " + correct + "/" + answered;
+    saveState(STORAGE_KEY, { deck: deck, pos: pos });
   }
 
   // The capital question is pointless when the capital shares the country's name.
@@ -279,13 +272,14 @@ var master = (function () {
   function renderPrompt() {
     var t = question.target;
     if (question.kind === "map") {
-      promptEl.innerHTML = '<div class="tag">Коя държава е на картата?</div><div id="map"></div>';
+      promptEl.innerHTML = '<div id="map"></div>';
       var mapEl = document.getElementById("map");
       mapEl.innerHTML = geo.svg(t, mapEl.clientWidth || 400, mapEl.clientHeight || 300);
       return;
     }
+    // Only capitals get a subtitle, so they are not mistaken for country names.
     var isCapital = question.kind === "capital";
-    promptEl.innerHTML = '<div class="tag">' + (isCapital ? "Столица" : "Държава") + "</div>" +
+    promptEl.innerHTML = (isCapital ? '<div class="tag">Столица</div>' : "") +
       '<div class="q-text' + (isCapital ? " capital" : "") + '"></div>';
     promptEl.querySelector(".q-text").textContent = isCapital ? t.capital : t.name;
   }
@@ -311,17 +305,12 @@ var master = (function () {
   function render() {
     renderPrompt();
     renderOptions();
-    updateScore();
   }
 
   function answer(country, btn) {
     if (question.done) return;
     question.done = true;
     var right = country === question.target;
-    answered++;
-    if (right) correct++;
-    save();
-    updateScore();
 
     // Reveal all names; green for the right flag, red for a wrong pick.
     optionsEl.classList.add("answered");
@@ -353,8 +342,6 @@ var master = (function () {
     clearTimeout(advanceTimer);
     deck = newDeck(deck[pos]);
     pos = 0;
-    correct = 0;
-    answered = 0;
     save();
     question = makeQuestion();
     render();
@@ -389,8 +376,6 @@ var master = (function () {
   if (saved && isValidDeck(saved.deck, saved.pos)) {
     deck = saved.deck;
     pos = saved.pos;
-    correct = saved.correct || 0;
-    answered = saved.answered || 0;
   } else {
     deck = newDeck(-1);
   }
