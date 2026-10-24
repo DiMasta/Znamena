@@ -19,16 +19,69 @@
       background: #ffffff;
       color: #111111;
       font-family: "Segoe UI", Arial, Helvetica, sans-serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       min-height: 100vh;
-      cursor: pointer;
       user-select: none;
       -webkit-user-select: none;
       -webkit-tap-highlight-color: transparent;
       -webkit-touch-callout: none;
       overflow: hidden;
+    }
+
+    /* Each variant is a full-screen view; only one is shown at a time. */
+    .screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    /* ---- Main menu ---- */
+    .menu-title {
+      font-size: clamp(32px, 8vw, 64px);
+      font-weight: 800;
+      letter-spacing: 3px;
+      margin-bottom: 44px;
+      text-transform: uppercase;
+    }
+
+    .menu-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      width: 100%;
+      max-width: 340px;
+    }
+
+    .menu-btn {
+      -webkit-tap-highlight-color: transparent;
+      border: 2px solid #111111;
+      background: #ffffff;
+      color: #111111;
+      border-radius: 14px;
+      padding: 20px 24px;
+      font-size: 22px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .menu-btn:active {
+      background: #f0f0f0;
+    }
+
+    /* Classic game is tappable anywhere to advance. */
+    #classic {
+      cursor: pointer;
     }
 
     #game {
@@ -86,7 +139,7 @@
     }
 
     /* Control bar pinned to the top, above the phone's safe area. */
-    #controls {
+    .controls {
       position: fixed;
       top: 0;
       left: 0;
@@ -116,21 +169,50 @@
     .ctrl:active {
       background: #e2e2e2;
     }
+
+    /* ---- Placeholder for the upcoming variant ---- */
+    .placeholder {
+      font-size: clamp(20px, 5vw, 32px);
+      font-weight: 700;
+      color: #555555;
+      max-width: 80vw;
+    }
   </style>
 </head>
 <body>
-  <div id="controls">
-    <button id="prev" class="ctrl" type="button" aria-label="Предишно знаме">‹</button>
-    <button id="restart" class="ctrl" type="button" aria-label="Започни отначало">↺</button>
-    <button id="next" class="ctrl" type="button" aria-label="Следващо знаме">›</button>
-  </div>
-  <div id="game">
-    <div id="name">&nbsp;</div>
-    <div id="flag-box">
-      <img id="flag" alt="флаг">
+  <!-- Main menu -->
+  <section id="menu" class="screen">
+    <h1 class="menu-title">Знамена</h1>
+    <div class="menu-buttons">
+      <button class="menu-btn" type="button" data-go="classic">Класически</button>
+      <button class="menu-btn" type="button" data-go="randomall">Случайни всички</button>
     </div>
-  </div>
-  <div id="counter"></div>
+  </section>
+
+  <!-- Classic variant -->
+  <section id="classic" class="screen hidden">
+    <div class="controls">
+      <button class="ctrl" type="button" data-go="menu" aria-label="Меню">⌂</button>
+      <button id="prev" class="ctrl" type="button" aria-label="Предишно знаме">‹</button>
+      <button id="restart" class="ctrl" type="button" aria-label="Започни отначало">↺</button>
+      <button id="next" class="ctrl" type="button" aria-label="Следващо знаме">›</button>
+    </div>
+    <div id="game">
+      <div id="name">&nbsp;</div>
+      <div id="flag-box">
+        <img id="flag" alt="флаг">
+      </div>
+    </div>
+    <div id="counter"></div>
+  </section>
+
+  <!-- Random all variant (gameplay to be defined) -->
+  <section id="randomall" class="screen hidden">
+    <div class="controls">
+      <button class="ctrl" type="button" data-go="menu" aria-label="Меню">⌂</button>
+    </div>
+    <div class="placeholder">Случайни всички<br>— очаквайте скоро</div>
+  </section>
 
   <script>
     // ISO 3166-1 alpha-2 code + name in Bulgarian (uppercase applied via CSS).
@@ -426,19 +508,48 @@
     bindButton("prev", prev);
     bindButton("next", next);
     bindButton("restart", restart);
-    // Taps on the control bar background should not advance either.
-    document.getElementById("controls").addEventListener("click", function (e) {
-      e.stopPropagation();
-    });
 
-    // Tapping anywhere else on the screen goes to the next flag.
-    document.body.addEventListener("click", next);
+    // ---- Screen routing ----
+    var screens = {
+      menu: document.getElementById("menu"),
+      classic: document.getElementById("classic"),
+      randomall: document.getElementById("randomall")
+    };
 
-    // Resume the previous session, or start a fresh shuffled cycle.
+    function showScreen(name) {
+      for (var key in screens) {
+        screens[key].classList.toggle("hidden", key !== name);
+      }
+    }
+
+    // Any element with data-go navigates to that screen (menu entries + home buttons).
+    var navButtons = document.querySelectorAll("[data-go]");
+    for (var n = 0; n < navButtons.length; n++) {
+      navButtons[n].addEventListener("click", function (e) {
+        e.stopPropagation();
+        showScreen(this.getAttribute("data-go"));
+      });
+    }
+
+    // Taps on a control bar background should not advance the flag.
+    var bars = document.querySelectorAll(".controls");
+    for (var b = 0; b < bars.length; b++) {
+      bars[b].addEventListener("click", function (e) {
+        e.stopPropagation();
+      });
+    }
+
+    // Tapping anywhere on the classic screen goes to the next flag.
+    document.getElementById("classic").addEventListener("click", next);
+
+    // Resume the previous classic session, or start a fresh shuffled cycle.
     if (!load()) {
       shuffle(-1);
     }
     render();
+
+    // Start on the main menu.
+    showScreen("menu");
   </script>
 </body>
 </html>
