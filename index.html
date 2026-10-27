@@ -137,13 +137,16 @@
 
     /* A flag inside a fixed box: identical footprint, border hugs the flag. */
     .flag-box {
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      position: relative;
       aspect-ratio: 3 / 2;
     }
 
+    /* Taken out of the flow and centred, so an unusually shaped flag
+       (like Nepal's tall one) shrinks to fit instead of stretching the box. */
     .flag-box img {
+      position: absolute;
+      inset: 0;
+      margin: auto;
       max-width: 100%;
       max-height: 100%;
       width: auto;
@@ -415,8 +418,8 @@
     </div>
   </section>
 
-  <script src="countries.js?v=10"></script>
-  <script src="vendor/geo.min.js?v=10"></script>
-  <script src="app.js?v=10"></script>
+  <script src="countries.js?v=11"></script>
+  <script src="vendor/geo.min.js?v=11"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
