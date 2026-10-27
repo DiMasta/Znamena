@@ -286,8 +286,13 @@
       background: #f0f0f0;
     }
 
+    /* Room for two lines is kept from the start, so revealing the names
+       after an answer never changes the layout. */
     .opt-label {
-      min-height: 1.2em;
+      height: 2.4em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       font-size: 13px;
       font-weight: 700;
       text-transform: uppercase;
@@ -410,8 +415,8 @@
     </div>
   </section>
 
-  <script src="countries.js?v=9"></script>
-  <script src="vendor/geo.min.js?v=9"></script>
-  <script src="app.js?v=9"></script>
+  <script src="countries.js?v=10"></script>
+  <script src="vendor/geo.min.js?v=10"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

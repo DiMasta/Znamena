@@ -134,7 +134,7 @@ var geo = (function () {
     northamerica: [-170, 14, -52, 72],
     caribbean: [-92, 7, -58, 27],
     southamerica: [-82, -56, -34, 13],
-    oceania: [110, -48, 200, 16]
+    oceania: [110, -48, 212, 16]
   };
   var features = null;  // all map shapes, once loaded
   var byId = {};        // ISO numeric id -> shape
@@ -190,23 +190,56 @@ var geo = (function () {
     });
     out += "</g>";
 
-    var marker = null;
+    var markers = [];
     if (target) {
       out += '<path d="' + path(target) + '" fill="#e53935" stroke="#ffffff" stroke-width="0.6"/>';
-      if (path.area(target) < 40) {
-        var b = path.bounds(target);
-        var halfDiag = Math.sqrt(Math.pow(b[1][0] - b[0][0], 2) + Math.pow(b[1][1] - b[0][1], 2)) / 2;
-        marker = { at: path.centroid(target), r: Math.min(60, Math.max(9, halfDiag + 6)) };
-      }
+      if (path.area(target) < 40) markers = islandGroups(target, path);
     } else if (country.ll) {
-      marker = { at: projection(country.ll), r: 9 };
+      var p = projection(country.ll);
+      markers = [{ x: p[0], y: p[1], r: 9 }];
     }
-    if (marker) {
-      out += '<circle cx="' + marker.at[0].toFixed(1) + '" cy="' + marker.at[1].toFixed(1) + '" r="' + marker.r.toFixed(1) +
+    markers.forEach(function (m) {
+      out += '<circle cx="' + m.x.toFixed(1) + '" cy="' + m.y.toFixed(1) + '" r="' + m.r.toFixed(1) +
         '" fill="rgba(229,57,53,0.15)" stroke="#e53935" stroke-width="2.5"/>' +
-        '<circle cx="' + marker.at[0].toFixed(1) + '" cy="' + marker.at[1].toFixed(1) + '" r="2.5" fill="#e53935"/>';
-    }
+        '<circle cx="' + m.x.toFixed(1) + '" cy="' + m.y.toFixed(1) + '" r="2.5" fill="#e53935"/>';
+    });
     return out + "</svg>";
+  }
+
+  // One circle per group of nearby islands, so a country spread over the
+  // ocean (like Kiribati) is marked where its islands actually are.
+  function islandGroups(feature, path) {
+    var GAP = 12;  // islands closer than this (in pixels) share a circle
+    var g = feature.geometry;
+    var parts = g.type === "MultiPolygon" ?
+      g.coordinates.map(function (c) { return { type: "Polygon", coordinates: c }; }) : [g];
+    var groups = [];
+    parts.forEach(function (part) {
+      var b = path.bounds(part);
+      if (!isFinite(b[0][0])) return;  // outside the visible hemisphere
+      groups.push([b[0][0], b[0][1], b[1][0], b[1][1]]);
+    });
+    // Merge overlapping or nearby boxes until nothing changes.
+    var merged = true;
+    while (merged) {
+      merged = false;
+      for (var i = 0; i < groups.length && !merged; i++) {
+        for (var j = i + 1; j < groups.length; j++) {
+          var a = groups[i];
+          var c = groups[j];
+          if (a[0] - GAP <= c[2] && c[0] - GAP <= a[2] && a[1] - GAP <= c[3] && c[1] - GAP <= a[3]) {
+            groups[i] = [Math.min(a[0], c[0]), Math.min(a[1], c[1]), Math.max(a[2], c[2]), Math.max(a[3], c[3])];
+            groups.splice(j, 1);
+            merged = true;
+            break;
+          }
+        }
+      }
+    }
+    return groups.map(function (b) {
+      var halfDiag = Math.sqrt(Math.pow(b[2] - b[0], 2) + Math.pow(b[3] - b[1], 2)) / 2;
+      return { x: (b[0] + b[2]) / 2, y: (b[1] + b[3]) / 2, r: Math.min(45, Math.max(9, halfDiag + 7)) };
+    });
   }
 
   return { load: load, ready: ready, svg: svg };
@@ -269,12 +302,24 @@ var master = (function () {
     };
   }
 
+  // Draw the map at exactly the size of its box; skipped when nothing changed.
+  function drawMap() {
+    var mapEl = document.getElementById("map");
+    if (!mapEl || !question || question.kind !== "map") return;
+    var w = mapEl.clientWidth;
+    var h = mapEl.clientHeight;
+    if (!w || !h) return;
+    var size = w + "x" + h;
+    if (mapEl.dataset.size === size) return;
+    mapEl.dataset.size = size;
+    mapEl.innerHTML = geo.svg(question.target, w, h);
+  }
+
   function renderPrompt() {
     var t = question.target;
     if (question.kind === "map") {
       promptEl.innerHTML = '<div id="map"></div>';
-      var mapEl = document.getElementById("map");
-      mapEl.innerHTML = geo.svg(t, mapEl.clientWidth || 400, mapEl.clientHeight || 300);
+      drawMap();
       return;
     }
     // Only capitals get a subtitle, so they are not mistaken for country names.
@@ -303,8 +348,9 @@ var master = (function () {
   }
 
   function render() {
-    renderPrompt();
+    // Answers first: the map measures the space the answers leave over.
     renderOptions();
+    renderPrompt();
   }
 
   function answer(country, btn) {
@@ -363,14 +409,12 @@ var master = (function () {
     if (question && question.done) next();
   });
 
-  // Redraw the map to fit when the phone is rotated.
-  var resizeTimer = null;
-  window.addEventListener("resize", function () {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function () {
-      if (question && question.kind === "map" && !screenEl.classList.contains("hidden")) renderPrompt();
-    }, 150);
-  });
+  // Redraw the map whenever its space changes size (e.g. the phone is rotated).
+  if (window.ResizeObserver) {
+    new ResizeObserver(drawMap).observe(promptEl);
+  } else {
+    window.addEventListener("resize", drawMap);
+  }
 
   var saved = loadState(STORAGE_KEY);
   if (saved && isValidDeck(saved.deck, saved.pos)) {
