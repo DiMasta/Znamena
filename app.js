@@ -130,12 +130,25 @@ var geo = (function () {
   var VIEWS = {
     europe: [-25, 34, 50, 71],
     africa: [-26, -36, 60, 38],
-    asia: [25, -11, 150, 75],
+    asia: [33, -11, 150, 75],
     northamerica: [-170, 14, -52, 72],
     caribbean: [-92, 7, -58, 27],
     southamerica: [-82, -56, -34, 13],
     oceania: [110, -48, 212, 16]
   };
+  // The continent each map view belongs to; countries elsewhere are faded.
+  var VIEW_REGION = {
+    europe: "europe",
+    africa: "africa",
+    asia: "asia",
+    northamerica: "americas",
+    caribbean: "americas",
+    southamerica: "americas",
+    oceania: "oceania"
+  };
+  // Map shapes whose continent can't be guessed from the nearest country.
+  var REGION_OVERRIDES = { "304": "americas", "010": "" };  // Greenland, Antarctica
+
   var features = null;  // all map shapes, once loaded
   var byId = {};        // ISO numeric id -> shape
   var loading = null;
@@ -147,10 +160,43 @@ var geo = (function () {
         .then(function (topo) {
           features = topojson.feature(topo, topo.objects.countries).features;
           features.forEach(function (f) { byId[f.id] = f; });
+          assignRegions();
         })
         .catch(function () { loading = null; });
     }
     return loading;
+  }
+
+  // Give every map shape a region and view. Territories that are not in the
+  // country list (Taiwan, Kosovo, Puerto Rico...) take their nearest country's.
+  function assignRegions() {
+    var known = [];
+    COUNTRIES.forEach(function (c) {
+      var f = byId[c.id];
+      if (!f) return;
+      f.region = c.region;
+      f.view = c.view;
+      known.push({ f: f, at: d3.geoCentroid(f) });
+    });
+    features.forEach(function (f) {
+      if (f.region !== undefined) return;
+      if (REGION_OVERRIDES.hasOwnProperty(f.id)) {
+        f.region = REGION_OVERRIDES[f.id];
+        return;
+      }
+      var at = d3.geoCentroid(f);
+      var best = null;
+      var bestDist = Infinity;
+      known.forEach(function (k) {
+        var d = d3.geoDistance(at, k.at);
+        if (d < bestDist) {
+          bestDist = d;
+          best = k.f;
+        }
+      });
+      f.region = best.region;
+      f.view = best.view;
+    });
   }
 
   function ready() {
@@ -179,16 +225,25 @@ var geo = (function () {
     var path = d3.geoPath(projection);
     if (path.digits) path.digits(1);
 
+    // Countries of the continent in grey; everything else faded into the background.
     var target = byId[country.id];
-    var out = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">' +
-      '<rect width="' + W + '" height="' + H + '" fill="#e8f1f8"/>' +
-      '<g fill="#d9d9d9" stroke="#ffffff" stroke-width="0.6">';
+    var region = VIEW_REGION[country.view];
+    var focus = "";
+    var faded = "";
     features.forEach(function (f) {
       if (f === target) return;
       var d = path(f);
-      if (d) out += '<path d="' + d + '"/>';
+      if (!d) return;
+      if (f.view === country.view || f.region === region) {
+        focus += '<path d="' + d + '"/>';
+      } else {
+        faded += '<path d="' + d + '"/>';
+      }
     });
-    out += "</g>";
+    var out = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect width="' + W + '" height="' + H + '" fill="#e8f1f8"/>' +
+      '<g fill="#f3f3f3" stroke="#e8f1f8" stroke-width="0.6">' + faded + "</g>" +
+      '<g fill="#d9d9d9" stroke="#ffffff" stroke-width="0.6">' + focus + "</g>";
 
     var markers = [];
     if (target) {
