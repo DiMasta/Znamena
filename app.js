@@ -308,9 +308,13 @@ var master = (function () {
   var promptEl = document.getElementById("prompt");
   var optionsEl = document.getElementById("options");
 
+  var HISTORY_MAX = 100;
+
   var deck = [];
   var pos = 0;
   var question = null;
+  var history = [];   // questions shown so far, so "‹" can go back to them
+  var hIndex = -1;    // position of the current question in history
   var advanceTimer = null;
 
   function save() {
@@ -353,7 +357,7 @@ var master = (function () {
       target: target,
       kind: kinds[Math.floor(Math.random() * kinds.length)],
       options: shuffleArray([target].concat(pickWrong(target))),
-      done: false
+      choice: null   // the flag picked, once answered
     };
   }
 
@@ -396,7 +400,7 @@ var master = (function () {
       btn.querySelector(".opt-label").textContent = country.name;
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
-        answer(country, btn);
+        answer(country);
       });
       optionsEl.appendChild(btn);
     });
@@ -406,36 +410,56 @@ var master = (function () {
     // Answers first: the map measures the space the answers leave over.
     renderOptions();
     renderPrompt();
+    if (question.choice) showResult();
   }
 
-  function answer(country, btn) {
-    if (question.done) return;
-    question.done = true;
-    var right = country === question.target;
-
-    // Reveal all names; green for the right flag, red for a wrong pick.
+  // Reveal all names; green for the right flag, red for a wrong pick.
+  function showResult() {
     optionsEl.classList.add("answered");
     var buttons = optionsEl.querySelectorAll(".option");
     question.options.forEach(function (c, i) {
       if (c === question.target) buttons[i].classList.add("correct");
+      else if (c === question.choice) buttons[i].classList.add("wrong");
     });
-    if (right) {
-      advanceTimer = setTimeout(next, 1200);
-    } else {
-      btn.classList.add("wrong");
-    }
+  }
+
+  function answer(country) {
+    if (question.choice) return;
+    question.choice = country;
+    showResult();
+    if (country === question.target) advanceTimer = setTimeout(next, 1200);
+  }
+
+  // Start a brand new question for the next country in the deck.
+  function addQuestion() {
+    question = makeQuestion();
+    history.push(question);
+    if (history.length > HISTORY_MAX) history.shift();
+    hIndex = history.length - 1;
   }
 
   function next() {
     clearTimeout(advanceTimer);
-    if (pos < deck.length - 1) {
-      pos++;
+    if (hIndex < history.length - 1) {
+      // Came back with "‹": step forward through questions already seen.
+      question = history[++hIndex];
     } else {
-      deck = newDeck(deck[pos]);
-      pos = 0;
+      if (pos < deck.length - 1) {
+        pos++;
+      } else {
+        deck = newDeck(deck[pos]);
+        pos = 0;
+      }
+      save();
+      addQuestion();
     }
-    save();
-    question = makeQuestion();
+    render();
+  }
+
+  function prev() {
+    if (hIndex <= 0) return;
+    clearTimeout(advanceTimer);
+    question = history[--hIndex];
     render();
   }
 
@@ -444,7 +468,8 @@ var master = (function () {
     deck = newDeck(deck[pos]);
     pos = 0;
     save();
-    question = makeQuestion();
+    history = [];
+    addQuestion();
     render();
   }
 
@@ -452,16 +477,17 @@ var master = (function () {
   function enter() {
     geo.load();
     if (!question) {
-      question = makeQuestion();
+      addQuestion();
       render();
     }
   }
 
+  bindButton("m-prev", prev);
   bindButton("m-next", next);
   bindButton("m-restart", restart);
   // After a wrong answer, tapping anywhere moves on to the next question.
   screenEl.addEventListener("click", function () {
-    if (question && question.done) next();
+    if (question && question.choice) next();
   });
 
   // Redraw the map whenever its space changes size (e.g. the phone is rotated).
