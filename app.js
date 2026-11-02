@@ -315,10 +315,44 @@ var master = (function () {
   var question = null;
   var history = [];   // questions shown so far, so "‹" can go back to them
   var hIndex = -1;    // position of the current question in history
+  var shown = false;  // whether the current question has been drawn yet
   var advanceTimer = null;
 
+  // Saved with country codes so the questions can be rebuilt on the next visit.
   function save() {
-    saveState(STORAGE_KEY, { deck: deck, pos: pos });
+    saveState(STORAGE_KEY, {
+      deck: deck,
+      pos: pos,
+      hIndex: hIndex,
+      history: history.map(function (q) {
+        return {
+          t: q.target.code,
+          k: q.kind,
+          o: q.options.map(function (c) { return c.code; }),
+          c: q.choice ? q.choice.code : null
+        };
+      })
+    });
+  }
+
+  // Rebuild saved questions; anything that no longer makes sense is dropped.
+  function restoreHistory(saved) {
+    if (!Array.isArray(saved)) return [];
+    var byCode = {};
+    COUNTRIES.forEach(function (c) { byCode[c.code] = c; });
+    var out = [];
+    saved.forEach(function (s) {
+      if (!s || !byCode[s.t] || ["name", "capital", "map"].indexOf(s.k) < 0) return;
+      if (!Array.isArray(s.o) || s.o.length !== 4 || s.o.indexOf(s.t) < 0) return;
+      if (!s.o.every(function (code) { return byCode[code]; })) return;
+      out.push({
+        target: byCode[s.t],
+        kind: s.k,
+        options: s.o.map(function (code) { return byCode[code]; }),
+        choice: byCode[s.c] || null
+      });
+    });
+    return out.slice(-HISTORY_MAX);
   }
 
   // The capital question is pointless when the capital shares the country's name.
@@ -365,6 +399,13 @@ var master = (function () {
   function drawMap() {
     var mapEl = document.getElementById("map");
     if (!mapEl || !question || question.kind !== "map") return;
+    if (!geo.ready()) {
+      // A saved map question can come back before the map data has loaded.
+      geo.load().then(function () {
+        if (geo.ready()) drawMap();
+      });
+      return;
+    }
     var w = mapEl.clientWidth;
     var h = mapEl.clientHeight;
     if (!w || !h) return;
@@ -400,17 +441,22 @@ var master = (function () {
       btn.querySelector(".opt-label").textContent = country.name;
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
-        answer(country);
+        // Once answered, a tap on a flag moves on like a tap anywhere else.
+        if (question.choice) next();
+        else answer(country);
       });
       optionsEl.appendChild(btn);
     });
   }
 
+  // Show the current question and save, so a later visit reopens it.
   function render() {
     // Answers first: the map measures the space the answers leave over.
     renderOptions();
     renderPrompt();
     if (question.choice) showResult();
+    shown = true;
+    save();
   }
 
   // Reveal all names; green for the right flag, red for a wrong pick.
@@ -427,6 +473,7 @@ var master = (function () {
     if (question.choice) return;
     question.choice = country;
     showResult();
+    save();
     if (country === question.target) advanceTimer = setTimeout(next, 1200);
   }
 
@@ -450,7 +497,6 @@ var master = (function () {
         deck = newDeck(deck[pos]);
         pos = 0;
       }
-      save();
       addQuestion();
     }
     render();
@@ -467,7 +513,6 @@ var master = (function () {
     clearTimeout(advanceTimer);
     deck = newDeck(deck[pos]);
     pos = 0;
-    save();
     history = [];
     addQuestion();
     render();
@@ -476,10 +521,8 @@ var master = (function () {
   // Called every time the Master screen is opened.
   function enter() {
     geo.load();
-    if (!question) {
-      addQuestion();
-      render();
-    }
+    if (!question) addQuestion();
+    if (!shown) render();
   }
 
   bindButton("m-prev", prev);
@@ -497,10 +540,16 @@ var master = (function () {
     window.addEventListener("resize", drawMap);
   }
 
+  // Resume where the last visit stopped, including the question on screen.
   var saved = loadState(STORAGE_KEY);
   if (saved && isValidDeck(saved.deck, saved.pos)) {
     deck = saved.deck;
     pos = saved.pos;
+    history = restoreHistory(saved.history);
+    if (history.length) {
+      hIndex = Math.min(Math.max(saved.hIndex | 0, 0), history.length - 1);
+      question = history[hIndex];
+    }
   } else {
     deck = newDeck(-1);
   }
@@ -516,11 +565,15 @@ var screens = {
   master: document.getElementById("master")
 };
 
+var SCREEN_KEY = "flagsGame.screen";
+
+// Show one screen and remember it, so the site reopens on the same one.
 function showScreen(name) {
   for (var key in screens) {
     screens[key].classList.toggle("hidden", key !== name);
   }
   if (name === "master") master.enter();
+  saveState(SCREEN_KEY, name);
 }
 
 // Any element with data-go navigates to that screen (menu entries + home buttons).
@@ -563,4 +616,5 @@ function releasePressed() {
 document.addEventListener("pointerup", releasePressed);
 document.addEventListener("pointercancel", releasePressed);
 
-showScreen("menu");
+var lastScreen = loadState(SCREEN_KEY);
+showScreen(screens.hasOwnProperty(lastScreen) ? lastScreen : "menu");
