@@ -255,8 +255,7 @@ var geo = (function () {
     }
     markers.forEach(function (m) {
       out += '<circle cx="' + m.x.toFixed(1) + '" cy="' + m.y.toFixed(1) + '" r="' + m.r.toFixed(1) +
-        '" fill="rgba(229,57,53,0.15)" stroke="#e53935" stroke-width="2.5"/>' +
-        '<circle cx="' + m.x.toFixed(1) + '" cy="' + m.y.toFixed(1) + '" r="2.5" fill="#e53935"/>';
+        '" fill="rgba(229,57,53,0.15)" stroke="#e53935" stroke-width="2.5"/>';
     });
     return out + "</svg>";
   }
