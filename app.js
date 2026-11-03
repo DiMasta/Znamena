@@ -241,21 +241,20 @@ var geo = (function () {
       }
     });
     var out = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">' +
-      '<rect width="' + W + '" height="' + H + '" fill="#e8f1f8"/>' +
-      '<g fill="#f3f3f3" stroke="#e8f1f8" stroke-width="0.6">' + faded + "</g>" +
-      '<g fill="#d9d9d9" stroke="#ffffff" stroke-width="0.6">' + focus + "</g>";
+      '<rect class="m-ocean" width="' + W + '" height="' + H + '"/>' +
+      '<g class="m-faded">' + faded + "</g>" +
+      '<g class="m-land">' + focus + "</g>";
 
     var markers = [];
     if (target) {
-      out += '<path d="' + path(target) + '" fill="#e53935" stroke="#ffffff" stroke-width="0.6"/>';
+      out += '<path class="m-target" d="' + path(target) + '"/>';
       if (path.area(target) < 40) markers = islandGroups(target, path);
     } else if (country.ll) {
       var p = projection(country.ll);
       markers = [{ x: p[0], y: p[1], r: 9 }];
     }
     markers.forEach(function (m) {
-      out += '<circle cx="' + m.x.toFixed(1) + '" cy="' + m.y.toFixed(1) + '" r="' + m.r.toFixed(1) +
-        '" fill="rgba(229,57,53,0.15)" stroke="#e53935" stroke-width="2.5"/>';
+      out += '<circle class="m-marker" cx="' + m.x.toFixed(1) + '" cy="' + m.y.toFixed(1) + '" r="' + m.r.toFixed(1) + '"/>';
     });
     return out + "</svg>";
   }
