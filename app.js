@@ -245,54 +245,21 @@ var geo = (function () {
       '<g class="m-faded">' + faded + "</g>" +
       '<g class="m-land">' + focus + "</g>";
 
-    var markers = [];
+    // Countries too small to see (islands, micro-states) are drawn with a
+    // bold outline and a soft glow, so each island shows where it really is.
     if (target) {
-      out += '<path class="m-target" d="' + path(target) + '"/>';
-      if (path.area(target) < 40) markers = islandGroups(target, path);
+      var d = path(target);
+      if (path.area(target) < 40) {
+        out += '<path class="m-glow" d="' + d + '"/><path class="m-target m-small" d="' + d + '"/>';
+      } else {
+        out += '<path class="m-target" d="' + d + '"/>';
+      }
     } else if (country.ll) {
       var p = projection(country.ll);
-      markers = [{ x: p[0], y: p[1], r: 9 }];
+      var at = 'cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '"';
+      out += '<circle class="m-glow" ' + at + ' r="12" style="stroke:none"/><circle class="m-target m-small" ' + at + ' r="1.5"/>';
     }
-    markers.forEach(function (m) {
-      out += '<circle class="m-marker" cx="' + m.x.toFixed(1) + '" cy="' + m.y.toFixed(1) + '" r="' + m.r.toFixed(1) + '"/>';
-    });
     return out + "</svg>";
-  }
-
-  // One circle per group of nearby islands, so a country spread over the
-  // ocean (like Kiribati) is marked where its islands actually are.
-  function islandGroups(feature, path) {
-    var GAP = 12;  // islands closer than this (in pixels) share a circle
-    var g = feature.geometry;
-    var parts = g.type === "MultiPolygon" ?
-      g.coordinates.map(function (c) { return { type: "Polygon", coordinates: c }; }) : [g];
-    var groups = [];
-    parts.forEach(function (part) {
-      var b = path.bounds(part);
-      if (!isFinite(b[0][0])) return;  // outside the visible hemisphere
-      groups.push([b[0][0], b[0][1], b[1][0], b[1][1]]);
-    });
-    // Merge overlapping or nearby boxes until nothing changes.
-    var merged = true;
-    while (merged) {
-      merged = false;
-      for (var i = 0; i < groups.length && !merged; i++) {
-        for (var j = i + 1; j < groups.length; j++) {
-          var a = groups[i];
-          var c = groups[j];
-          if (a[0] - GAP <= c[2] && c[0] - GAP <= a[2] && a[1] - GAP <= c[3] && c[1] - GAP <= a[3]) {
-            groups[i] = [Math.min(a[0], c[0]), Math.min(a[1], c[1]), Math.max(a[2], c[2]), Math.max(a[3], c[3])];
-            groups.splice(j, 1);
-            merged = true;
-            break;
-          }
-        }
-      }
-    }
-    return groups.map(function (b) {
-      var halfDiag = Math.sqrt(Math.pow(b[2] - b[0], 2) + Math.pow(b[3] - b[1], 2)) / 2;
-      return { x: (b[0] + b[2]) / 2, y: (b[1] + b[3]) / 2, r: Math.min(45, Math.max(9, halfDiag + 7)) };
-    });
   }
 
   return { load: load, ready: ready, svg: svg };

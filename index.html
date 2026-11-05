@@ -32,7 +32,6 @@
       --map-land: #d9d9d9;
       --map-border: #ffffff;
       --map-target: #e53935;
-      --map-marker: rgba(229, 57, 53, 0.15);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -60,7 +59,6 @@
         --map-land: #4a5058;
         --map-border: #1a2733;
         --map-target: #ff5a52;
-        --map-marker: rgba(255, 90, 82, 0.2);
       }
     }
 
@@ -343,10 +341,22 @@
       stroke-width: 0.6;
     }
 
-    .m-marker {
-      fill: var(--map-marker);
+    /* Small countries: a bold red outline makes tiny islands visible... */
+    .m-target.m-small {
       stroke: var(--map-target);
       stroke-width: 2.5;
+      stroke-linejoin: round;
+    }
+
+    /* ...and a soft glow around them catches the eye. Opacity is applied to
+       the whole shape at once, so nearby islands blend into one patch. */
+    .m-glow {
+      fill: var(--map-target);
+      stroke: var(--map-target);
+      stroke-width: 22;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      opacity: 0.45;
     }
 
     #options {
@@ -507,8 +517,8 @@
     </div>
   </section>
 
-  <script src="countries.js?v=16"></script>
-  <script src="vendor/geo.min.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="countries.js?v=17"></script>
+  <script src="vendor/geo.min.js?v=17"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>
