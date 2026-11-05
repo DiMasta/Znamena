@@ -279,6 +279,27 @@ var geo = (function () {
   return { load: load, ready: ready, svg: svg };
 })();
 
+// Draw a country's continent map into el at exactly el's size. Skipped when
+// that country is already drawn at that size; waits for the map data if needed.
+function drawCountryMap(el, country) {
+  if (!el || !country) return;
+  el.dataset.want = country.code;
+  if (!geo.ready()) {
+    geo.load().then(function () {
+      // Only if the element still wants this country (not a later one).
+      if (geo.ready() && el.dataset.want === country.code) drawCountryMap(el, country);
+    });
+    return;
+  }
+  var w = el.clientWidth;
+  var h = el.clientHeight;
+  if (!w || !h) return;
+  var key = country.code + ":" + w + "x" + h;
+  if (el.dataset.drawn === key) return;
+  el.dataset.drawn = key;
+  el.innerHTML = geo.svg(country, w, h);
+}
+
 // ---- Master: quiz, pick the right flag out of four ----
 
 var master = (function () {
@@ -383,30 +404,14 @@ var master = (function () {
     };
   }
 
-  // Draw the map at exactly the size of its box; skipped when nothing changed.
   function drawMap() {
-    var mapEl = document.getElementById("map");
-    if (!mapEl || !question || question.kind !== "map") return;
-    if (!geo.ready()) {
-      // A saved map question can come back before the map data has loaded.
-      geo.load().then(function () {
-        if (geo.ready()) drawMap();
-      });
-      return;
-    }
-    var w = mapEl.clientWidth;
-    var h = mapEl.clientHeight;
-    if (!w || !h) return;
-    var size = w + "x" + h;
-    if (mapEl.dataset.size === size) return;
-    mapEl.dataset.size = size;
-    mapEl.innerHTML = geo.svg(question.target, w, h);
+    if (question && question.kind === "map") drawCountryMap(document.getElementById("map"), question.target);
   }
 
   function renderPrompt() {
     var t = question.target;
     if (question.kind === "map") {
-      promptEl.innerHTML = '<div id="map"></div>';
+      promptEl.innerHTML = '<div id="map" class="map"></div>';
       drawMap();
       return;
     }
@@ -547,10 +552,155 @@ var master = (function () {
 
 // ---- Screen routing ----
 
+// ---- Learn: one card per country, by continent and in a chosen order ----
+
+var learn = (function () {
+  var STORAGE_KEY = "flagsGame.learn.v1";
+  var SCOPES = [
+    ["all", "Всички държави"],
+    ["europe", "Европа"],
+    ["asia", "Азия"],
+    ["africa", "Африка"],
+    ["northamerica", "Северна Америка"],
+    ["southamerica", "Южна Америка"],
+    ["oceania", "Океания"]
+  ];
+  var ORDERS = [
+    ["alpha", "По азбучен ред"],
+    ["area", "По площ"]
+  ];
+  var scopeEl = document.getElementById("learn-scope");
+  var orderEl = document.getElementById("learn-order");
+  var posEl = document.getElementById("learn-pos");
+  var nameEl = document.getElementById("card-name");
+  var flagEl = document.querySelector("#card-flag img");
+  var capitalEl = document.getElementById("card-capital");
+  var areaEl = document.getElementById("card-area");
+  var mapEl = document.getElementById("card-map");
+
+  // The chosen list, and the card reached in every list (kept separately).
+  var state = { scope: "all", order: "alpha", pos: {} };
+  var list = [];
+
+  function continentOf(c) {
+    if (c.view === "northamerica" || c.view === "caribbean") return "northamerica";
+    if (c.view === "southamerica") return "southamerica";
+    return c.region;
+  }
+
+  // Countries of the chosen continent, alphabetically or largest first.
+  function buildList() {
+    list = COUNTRIES.filter(function (c) {
+      return state.scope === "all" || continentOf(c) === state.scope;
+    });
+    if (state.order === "area") {
+      list.sort(function (a, b) { return b.area - a.area; });
+    } else {
+      list.sort(function (a, b) { return a.name.localeCompare(b.name, "bg"); });
+    }
+  }
+
+  function key() {
+    return state.scope + "|" + state.order;
+  }
+
+  function index() {
+    return Math.min(state.pos[key()] || 0, list.length - 1);
+  }
+
+  function formatArea(km2) {
+    return km2.toLocaleString("bg-BG", { maximumFractionDigits: km2 < 10 ? 2 : 0 }) + " км²";
+  }
+
+  function render() {
+    var i = index();
+    var c = list[i];
+    nameEl.textContent = c.name;
+    setFlag(flagEl, c, 640);
+    capitalEl.textContent = c.capital;
+    areaEl.textContent = "Площ: " + formatArea(c.area);
+    posEl.textContent = (i + 1) + "/" + list.length;
+    drawCountryMap(mapEl, c);
+    saveState(STORAGE_KEY, state);
+  }
+
+  function next() {
+    // After the last card, start the list again.
+    state.pos[key()] = (index() + 1) % list.length;
+    render();
+  }
+
+  function prev() {
+    if (index() > 0) {
+      state.pos[key()] = index() - 1;
+      render();
+    }
+  }
+
+  // Back to the first card of the chosen list; other lists keep their place.
+  function reset() {
+    state.pos[key()] = 0;
+    render();
+  }
+
+  function fillSelect(el, items, value) {
+    items.forEach(function (item) {
+      var opt = document.createElement("option");
+      opt.value = item[0];
+      opt.textContent = item[1];
+      el.appendChild(opt);
+    });
+    el.value = value;
+  }
+
+  function choose() {
+    state.scope = scopeEl.value;
+    state.order = orderEl.value;
+    buildList();
+    render();
+  }
+
+  // Called every time the Learn screen is opened.
+  function enter() {
+    geo.load();
+    render();
+  }
+
+  var saved = loadState(STORAGE_KEY);
+  var isOneOf = function (items, v) { return items.some(function (item) { return item[0] === v; }); };
+  if (saved && isOneOf(SCOPES, saved.scope) && isOneOf(ORDERS, saved.order) && saved.pos && typeof saved.pos === "object") {
+    state = saved;
+  }
+  fillSelect(scopeEl, SCOPES, state.scope);
+  fillSelect(orderEl, ORDERS, state.order);
+  buildList();
+
+  bindButton("l-prev", prev);
+  bindButton("l-next", next);
+  bindButton("l-reset", reset);
+  scopeEl.addEventListener("change", choose);
+  orderEl.addEventListener("change", choose);
+  // Taps on the list choosers must not turn the card.
+  document.querySelector(".learn-bar").addEventListener("click", function (e) {
+    e.stopPropagation();
+  });
+  // Tapping anywhere else shows the next card.
+  document.getElementById("learn").addEventListener("click", next);
+  // Redraw the map whenever its space changes size (e.g. the phone is rotated).
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () { drawCountryMap(mapEl, list[index()]); }).observe(mapEl);
+  } else {
+    window.addEventListener("resize", function () { drawCountryMap(mapEl, list[index()]); });
+  }
+
+  return { enter: enter };
+})();
+
 var screens = {
   menu: document.getElementById("menu"),
   classic: document.getElementById("classic"),
-  master: document.getElementById("master")
+  master: document.getElementById("master"),
+  learn: document.getElementById("learn")
 };
 
 var SCREEN_KEY = "flagsGame.screen";
@@ -561,6 +711,7 @@ function showScreen(name) {
     screens[key].classList.toggle("hidden", key !== name);
   }
   if (name === "master") master.enter();
+  if (name === "learn") learn.enter();
   saveState(SCREEN_KEY, name);
 }
 

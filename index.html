@@ -302,7 +302,7 @@
       color: var(--star);
     }
 
-    #map {
+    .map {
       position: relative;
       flex: 1 1 0;
       min-height: 0;
@@ -311,7 +311,7 @@
       overflow: hidden;
     }
 
-    #map svg {
+    .map svg {
       position: absolute;
       inset: 0;
       width: 100%;
@@ -428,6 +428,90 @@
       font-size: 18px;
     }
 
+    /* ---- Learn: one country card at a time ---- */
+    #learn {
+      cursor: pointer;
+      justify-content: flex-start;
+      padding: var(--top) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* Which countries, in which order, and the position in that list. */
+    .learn-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      max-width: 560px;
+      margin-bottom: 12px;
+      cursor: default;
+    }
+
+    .learn-bar select {
+      flex: 1 1 0;
+      min-width: 0;
+      height: 40px;
+      padding: 0 8px;
+      border: 1px solid var(--btn-border);
+      border-radius: 10px;
+      background: var(--btn-bg);
+      color: var(--btn-text);
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    #learn-pos {
+      flex: 0 0 auto;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 1px;
+    }
+
+    #card {
+      flex: 1 1 0;
+      min-height: 0;
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card-info {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #card-name {
+      font-size: clamp(22px, 6.5vmin, 40px);
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      line-height: 1.15;
+    }
+
+    #card-flag {
+      width: min(62%, 300px);
+      margin: 4px 0;
+    }
+
+    #card .tag {
+      margin: 4px 0 0;
+    }
+
+    #card-capital {
+      font-size: clamp(18px, 5vmin, 30px);
+    }
+
+    #card-area {
+      font-size: 15px;
+      color: var(--muted);
+    }
+
     /* Phones held sideways: the screen is short, so the control buttons move
        to a column on the right and the content uses the full height. */
     @media (orientation: landscape) and (max-height: 600px) {
@@ -447,8 +531,35 @@
       }
 
       #classic,
-      #master {
+      #master,
+      #learn {
         padding: 12px calc(84px + env(safe-area-inset-right, 0px)) 12px calc(16px + env(safe-area-inset-left, 0px));
+      }
+
+      /* Learn card: details on the left, map on the right. */
+      .learn-bar {
+        max-width: none;
+        margin-bottom: 8px;
+      }
+
+      #card {
+        flex-direction: row;
+        max-width: none;
+      }
+
+      .card-info {
+        flex: 1 1 0;
+        min-width: 0;
+        justify-content: center;
+      }
+
+      #card-flag {
+        width: min(70%, calc((100vh - 210px) * 1.5));
+        width: min(70%, calc((100dvh - 210px) * 1.5));
+      }
+
+      #card-map {
+        flex: 1.3 1 0;
       }
 
       /* Question on the left, answers on the right. */
@@ -485,6 +596,7 @@
     <div class="menu-buttons">
       <button class="menu-btn" type="button" data-go="classic">Класически</button>
       <button class="menu-btn" type="button" data-go="master">Майстор</button>
+      <button class="menu-btn" type="button" data-go="learn">Учи</button>
     </div>
   </section>
 
@@ -517,8 +629,33 @@
     </div>
   </section>
 
-  <script src="countries.js?v=19"></script>
-  <script src="vendor/geo.min.js?v=19"></script>
-  <script src="app.js?v=19"></script>
+  <!-- Learn: a card per country with its flag, capital and place on the map -->
+  <section id="learn" class="screen hidden">
+    <div class="controls">
+      <button class="ctrl" type="button" data-go="menu" aria-label="Меню">⌂</button>
+      <button id="l-prev" class="ctrl" type="button" aria-label="Предишна държава">‹</button>
+      <button id="l-reset" class="ctrl" type="button" aria-label="Към първата карта">↺</button>
+      <button id="l-next" class="ctrl" type="button" aria-label="Следваща държава">›</button>
+    </div>
+    <div class="learn-bar">
+      <select id="learn-scope" aria-label="Кои държави"></select>
+      <select id="learn-order" aria-label="Подредба"></select>
+      <div id="learn-pos"></div>
+    </div>
+    <div id="card">
+      <div class="card-info">
+        <div id="card-name"></div>
+        <div id="card-flag" class="flag-box"><img alt=""></div>
+        <div class="tag">Столица</div>
+        <div id="card-capital" class="q-text capital"></div>
+        <div id="card-area"></div>
+      </div>
+      <div id="card-map" class="map"></div>
+    </div>
+  </section>
+
+  <script src="countries.js?v=20"></script>
+  <script src="vendor/geo.min.js?v=20"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>
