@@ -327,11 +327,20 @@ var master = (function () {
     return n.indexOf(c) === 0 || c.indexOf(n) === 0;
   }
 
-  // Three wrong answers, preferably from the same part of the world.
+  // Three wrong answers: flags that look like the right one, chosen at random
+  // among its five closest look-alikes so the same three don't always appear.
+  // The fallbacks (same part of the world, then anywhere) only fill gaps.
   function pickWrong(target) {
     var used = {};
     used[target.code] = true;
     var picks = [];
+    var lookAlikes = shuffleArray(COUNTRIES.filter(function (c) {
+      return (target.similar || []).slice(0, 5).indexOf(c.code) >= 0;
+    }));
+    for (var s = 0; s < lookAlikes.length && picks.length < 3; s++) {
+      used[lookAlikes[s].code] = true;
+      picks.push(lookAlikes[s]);
+    }
     var groups = [
       function (c) { return c.view === target.view; },
       function (c) { return c.region === target.region; },
