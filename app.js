@@ -552,35 +552,20 @@ var master = (function () {
 
 // ---- Screen routing ----
 
-// ---- Learn: one card per country, by continent and in a chosen order ----
+// ---- Learn: pick a list, then swipe through one card per country ----
 
 var learn = (function () {
-  var STORAGE_KEY = "flagsGame.learn.v1";
-  var SCOPES = [
-    ["all", "Всички държави"],
-    ["europe", "Европа"],
-    ["asia", "Азия"],
-    ["africa", "Африка"],
-    ["northamerica", "Северна Америка"],
-    ["southamerica", "Южна Америка"],
-    ["oceania", "Океания"]
-  ];
-  var ORDERS = [
-    ["alpha", "По азбучен ред"],
-    ["area", "По площ"]
-  ];
-  var scopeEl = document.getElementById("learn-scope");
-  var orderEl = document.getElementById("learn-order");
-  var posEl = document.getElementById("learn-pos");
-  var nameEl = document.getElementById("card-name");
-  var flagEl = document.querySelector("#card-flag img");
-  var capitalEl = document.getElementById("card-capital");
-  var areaEl = document.getElementById("card-area");
-  var mapEl = document.getElementById("card-map");
+  var STORAGE_KEY = "flagsGame.learn.v2";
+  var LISTS = ["europe", "asia", "africa", "northamerica", "southamerica", "oceania", "all", "area"];
+  var scrollEl = document.getElementById("cards-scroll");
+  var posEl = document.getElementById("cards-pos");
 
-  // The chosen list, and the card reached in every list (kept separately).
-  var state = { scope: "all", order: "alpha", pos: {} };
-  var list = [];
+  // The open list, and the card reached in every list (kept separately).
+  var state = { list: null, pos: {} };
+  var list = [];      // countries of the open list, in order
+  var cards = [];     // their card elements
+  var builtFor = null;
+  var current = 0;
 
   function continentOf(c) {
     if (c.view === "northamerica" || c.view === "caribbean") return "northamerica";
@@ -588,119 +573,150 @@ var learn = (function () {
     return c.region;
   }
 
-  // Countries of the chosen continent, alphabetically or largest first.
-  function buildList() {
-    list = COUNTRIES.filter(function (c) {
-      return state.scope === "all" || continentOf(c) === state.scope;
-    });
-    if (state.order === "area") {
-      list.sort(function (a, b) { return b.area - a.area; });
+  // A continent alphabetically, all countries alphabetically, or all by area.
+  function countriesFor(key) {
+    var everyone = key === "all" || key === "area";
+    var out = COUNTRIES.filter(function (c) { return everyone || continentOf(c) === key; });
+    if (key === "area") {
+      out.sort(function (a, b) { return b.area - a.area; });
     } else {
-      list.sort(function (a, b) { return a.name.localeCompare(b.name, "bg"); });
+      out.sort(function (a, b) { return a.name.localeCompare(b.name, "bg"); });
     }
-  }
-
-  function key() {
-    return state.scope + "|" + state.order;
-  }
-
-  function index() {
-    return Math.min(state.pos[key()] || 0, list.length - 1);
+    return out;
   }
 
   function formatArea(km2) {
     return km2.toLocaleString("bg-BG", { maximumFractionDigits: km2 < 10 ? 2 : 0 }) + " км²";
   }
 
-  function render() {
-    var i = index();
-    var c = list[i];
-    nameEl.textContent = c.name;
-    setFlag(flagEl, c, 640);
-    capitalEl.textContent = c.capital;
-    areaEl.textContent = "Площ: " + formatArea(c.area);
-    posEl.textContent = (i + 1) + "/" + list.length;
-    drawCountryMap(mapEl, c);
+  function makeCard(c) {
+    var el = document.createElement("div");
+    el.className = "lcard";
+    el.innerHTML =
+      '<div class="lc-info">' +
+        '<div class="lc-name"></div>' +
+        '<div class="flag-box lc-flag"><img alt=""></div>' +
+        '<div class="tag">Столица</div>' +
+        '<div class="q-text capital lc-capital"></div>' +
+        '<div class="lc-area"></div>' +
+      '</div>' +
+      '<div class="lc-side"><div class="map lc-map"></div><div class="lc-fact"></div></div>';
+    el.querySelector(".lc-name").textContent = c.name;
+    el.querySelector(".lc-capital").textContent = c.capital;
+    el.querySelector(".lc-area").textContent = "Площ: " + formatArea(c.area);
+    el.querySelector(".lc-fact").textContent = FACTS[c.code] || "";
+    return el;
+  }
+
+  // Flags and maps are loaded only for cards near the screen; maps of cards
+  // that scroll far away are dropped again to keep the page light.
+  var nearby = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      var i = cards.indexOf(entry.target);
+      if (i < 0) return;
+      var mapEl = entry.target.querySelector(".lc-map");
+      if (entry.isIntersecting) {
+        var img = entry.target.querySelector("img");
+        if (!img.getAttribute("src")) setFlag(img, list[i], 640);
+        drawCountryMap(mapEl, list[i]);
+      } else {
+        mapEl.innerHTML = "";
+        delete mapEl.dataset.drawn;
+      }
+    });
+  }, { root: scrollEl, rootMargin: "100% 0px" });
+
+  function build() {
+    nearby.disconnect();
+    scrollEl.innerHTML = "";
+    list = countriesFor(state.list);
+    cards = list.map(makeCard);
+    cards.forEach(function (el) {
+      scrollEl.appendChild(el);
+      nearby.observe(el);
+    });
+    builtFor = state.list;
+  }
+
+  function save() {
     saveState(STORAGE_KEY, state);
   }
 
-  function next() {
-    // After the last card, start the list again.
-    state.pos[key()] = (index() + 1) % list.length;
-    render();
+  function showPos() {
+    posEl.textContent = (current + 1) + "/" + list.length;
   }
 
-  function prev() {
-    if (index() > 0) {
-      state.pos[key()] = index() - 1;
-      render();
-    }
+  // Put the given card on screen without animation.
+  function jumpTo(i) {
+    current = Math.max(0, Math.min(i, cards.length - 1));
+    scrollEl.scrollTop = current * scrollEl.clientHeight;
+    showPos();
   }
 
-  // Back to the first card of the chosen list; other lists keep their place.
-  function reset() {
-    state.pos[key()] = 0;
-    render();
+  // Follow the swipes: the card filling the screen is the current one.
+  scrollEl.addEventListener("scroll", function () {
+    var h = scrollEl.clientHeight;
+    if (!h || !cards.length) return;
+    var i = Math.max(0, Math.min(Math.round(scrollEl.scrollTop / h), cards.length - 1));
+    if (i === current) return;
+    current = i;
+    state.pos[state.list] = i;
+    showPos();
+    save();
+  });
+
+  // Keep the same card in place when the phone is rotated.
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () {
+      if (!cards.length || !scrollEl.clientHeight) return;
+      jumpTo(current);
+      for (var i = current - 1; i <= current + 1; i++) {
+        if (cards[i]) drawCountryMap(cards[i].querySelector(".lc-map"), list[i]);
+      }
+    }).observe(scrollEl);
   }
 
-  function fillSelect(el, items, value) {
-    items.forEach(function (item) {
-      var opt = document.createElement("option");
-      opt.value = item[0];
-      opt.textContent = item[1];
-      el.appendChild(opt);
+  // Back to the first card of the open list; other lists keep their place.
+  bindButton("cards-reset", function () {
+    state.pos[state.list] = 0;
+    jumpTo(0);
+    save();
+  });
+
+  // Buttons on the Learn page open their list of cards.
+  var listButtons = document.querySelectorAll("[data-list]");
+  for (var b = 0; b < listButtons.length; b++) {
+    listButtons[b].addEventListener("click", function () {
+      state.list = this.getAttribute("data-list");
+      save();
+      showScreen("cards");
     });
-    el.value = value;
   }
 
-  function choose() {
-    state.scope = scopeEl.value;
-    state.order = orderEl.value;
-    buildList();
-    render();
-  }
-
-  // Called every time the Learn screen is opened.
-  function enter() {
+  // Called when the cards screen is shown. Returns false if no list is chosen.
+  function enterCards() {
+    if (LISTS.indexOf(state.list) < 0) return false;
     geo.load();
-    render();
+    if (builtFor !== state.list) build();
+    jumpTo(state.pos[state.list] || 0);
+    return true;
   }
 
   var saved = loadState(STORAGE_KEY);
-  var isOneOf = function (items, v) { return items.some(function (item) { return item[0] === v; }); };
-  if (saved && isOneOf(SCOPES, saved.scope) && isOneOf(ORDERS, saved.order) && saved.pos && typeof saved.pos === "object") {
-    state = saved;
-  }
-  fillSelect(scopeEl, SCOPES, state.scope);
-  fillSelect(orderEl, ORDERS, state.order);
-  buildList();
-
-  bindButton("l-prev", prev);
-  bindButton("l-next", next);
-  bindButton("l-reset", reset);
-  scopeEl.addEventListener("change", choose);
-  orderEl.addEventListener("change", choose);
-  // Taps on the list choosers must not turn the card.
-  document.querySelector(".learn-bar").addEventListener("click", function (e) {
-    e.stopPropagation();
-  });
-  // Tapping anywhere else shows the next card.
-  document.getElementById("learn").addEventListener("click", next);
-  // Redraw the map whenever its space changes size (e.g. the phone is rotated).
-  if (window.ResizeObserver) {
-    new ResizeObserver(function () { drawCountryMap(mapEl, list[index()]); }).observe(mapEl);
-  } else {
-    window.addEventListener("resize", function () { drawCountryMap(mapEl, list[index()]); });
+  if (saved && saved.pos && typeof saved.pos === "object") {
+    state.pos = saved.pos;
+    if (LISTS.indexOf(saved.list) >= 0) state.list = saved.list;
   }
 
-  return { enter: enter };
+  return { enterCards: enterCards };
 })();
 
 var screens = {
   menu: document.getElementById("menu"),
   classic: document.getElementById("classic"),
   master: document.getElementById("master"),
-  learn: document.getElementById("learn")
+  learn: document.getElementById("learn"),
+  cards: document.getElementById("cards")
 };
 
 var SCREEN_KEY = "flagsGame.screen";
@@ -711,7 +727,8 @@ function showScreen(name) {
     screens[key].classList.toggle("hidden", key !== name);
   }
   if (name === "master") master.enter();
-  if (name === "learn") learn.enter();
+  // Without a chosen list there are no cards to show: go to the Learn page.
+  if (name === "cards" && !learn.enterCards()) return showScreen("learn");
   saveState(SCREEN_KEY, name);
 }
 
