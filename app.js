@@ -158,13 +158,27 @@ var geo = (function () {
       loading = fetch("vendor/countries-50m.json")
         .then(function (r) { return r.json(); })
         .then(function (topo) {
-          features = topojson.feature(topo, topo.objects.countries).features;
-          features.forEach(function (f) { byId[f.id] = f; });
+          // Shapes sharing a code (Australia and its Ashmore and Cartier
+          // Islands) are merged into one, so the whole country is highlighted.
+          features = [];
+          topojson.feature(topo, topo.objects.countries).features.forEach(function (f) {
+            var same = f.id && byId[f.id];
+            if (same) {
+              same.geometry = { type: "MultiPolygon", coordinates: polygons(same.geometry).concat(polygons(f.geometry)) };
+              return;
+            }
+            if (f.id) byId[f.id] = f;
+            features.push(f);
+          });
           assignRegions();
         })
         .catch(function () { loading = null; });
     }
     return loading;
+  }
+
+  function polygons(geometry) {
+    return geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
   }
 
   // Give every map shape a region and view. Territories that are not in the
