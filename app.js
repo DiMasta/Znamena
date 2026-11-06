@@ -228,27 +228,38 @@ var geo = (function () {
     return { type: "MultiPoint", coordinates: pts };
   }
 
-  // SVG markup of the country's continent with the country highlighted, sized
-  // W x H to fill its container. Countries too small to see get a circle.
-  function svg(country, W, H) {
+  // The country's continent, fitted to W x H.
+  function projectionFor(country, W, H) {
     var box = VIEWS[country.view];
-    var projection = d3.geoAzimuthalEqualArea()
+    return d3.geoAzimuthalEqualArea()
       .rotate([-(box[0] + box[2]) / 2, -(box[1] + box[3]) / 2])
       .clipAngle(90)
       .fitExtent([[8, 8], [W - 8, H - 8]], boxOutline(box));
+  }
+
+  // Countries of the continent are drawn in grey; the rest is faded.
+  function inFocus(f, country) {
+    return f.view === country.view || f.region === VIEW_REGION[country.view];
+  }
+
+  // Countries smaller than this (in square pixels) get a glow so they show.
+  var SMALL = 40;
+
+  // SVG markup of the country's continent with the country highlighted, sized
+  // W x H to fill its container.
+  function svg(country, W, H) {
+    var projection = projectionFor(country, W, H);
     var path = d3.geoPath(projection);
     if (path.digits) path.digits(1);
 
-    // Countries of the continent in grey; everything else faded into the background.
     var target = byId[country.id];
-    var region = VIEW_REGION[country.view];
     var focus = "";
     var faded = "";
     features.forEach(function (f) {
       if (f === target) return;
       var d = path(f);
       if (!d) return;
-      if (f.view === country.view || f.region === region) {
+      if (inFocus(f, country)) {
         focus += '<path d="' + d + '"/>';
       } else {
         faded += '<path d="' + d + '"/>';
@@ -263,7 +274,7 @@ var geo = (function () {
     // bold outline and a soft glow, so each island shows where it really is.
     if (target) {
       var d = path(target);
-      if (path.area(target) < 40) {
+      if (path.area(target) < SMALL) {
         out += '<path class="m-glow" d="' + d + '"/><path class="m-target m-small" d="' + d + '"/>';
       } else {
         out += '<path class="m-target" d="' + d + '"/>';
@@ -276,7 +287,179 @@ var geo = (function () {
     return out + "</svg>";
   }
 
-  return { load: load, ready: ready, svg: svg };
+  // Continent backgrounds, by view, size and theme. Drawing every country of
+  // the map is the slow part, and the background is the same for all
+  // countries of a continent, so it is painted only once per continent.
+  var bases = {};
+  var baseOrder = [];
+  var BASES_KEPT = 12;
+
+  // Backgrounds are painted in small pieces when the phone is idle (even
+  // between the frames of a swipe), so painting never freezes the page.
+  var CHUNK_POINTS = 2500;   // map points painted per piece
+  var jobs = [];
+  var jobsRunning = false;
+  var whenIdle = window.requestIdleCallback ?
+    function (fn) { window.requestIdleCallback(fn, { timeout: 500 }); } :
+    function (fn) { setTimeout(fn, 16); };
+
+  function themeColors() {
+    var css = getComputedStyle(document.documentElement);
+    return function (name) { return css.getPropertyValue(name).trim(); };
+  }
+
+  function countPoints(coords) {
+    return typeof coords[0] === "number" ? 1 : coords.reduce(function (sum, c) { return sum + countPoints(c); }, 0);
+  }
+
+  function pointsIn(f) {
+    if (f.points === undefined) f.points = f.geometry ? countPoints(f.geometry.coordinates) : 0;
+    return f.points;
+  }
+
+  // Start (or find) the background for a country's continent at W x H.
+  function baseFor(country, W, H, ratio, color) {
+    var key = [country.view, W, H, ratio, color("--map-ocean")].join(":");
+    if (bases[key]) return bases[key];
+    var canvas = document.createElement("canvas");
+    canvas.width = Math.round(W * ratio);
+    canvas.height = Math.round(H * ratio);
+    var ctx = canvas.getContext("2d");
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.fillStyle = color("--map-ocean");
+    ctx.fillRect(0, 0, W, H);
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 0.6;
+    // Pieces: faded countries first, then the continent on top.
+    var pieces = [];
+    [[false, "--map-faded", "--map-ocean"], [true, "--map-land", "--map-border"]].forEach(function (layer) {
+      var group = [];
+      var points = 0;
+      features.forEach(function (f) {
+        if (inFocus(f, country) !== layer[0]) return;
+        group.push(f);
+        points += pointsIn(f);
+        if (points >= CHUNK_POINTS) {
+          pieces.push({ fill: color(layer[1]), stroke: color(layer[2]), features: group });
+          group = [];
+          points = 0;
+        }
+      });
+      if (group.length) pieces.push({ fill: color(layer[1]), stroke: color(layer[2]), features: group });
+    });
+    var base = {
+      canvas: canvas,
+      ctx: ctx,
+      path: d3.geoPath(projectionFor(country, W, H), ctx),
+      pieces: pieces,
+      ready: false,
+      waiting: []
+    };
+    bases[key] = base;
+    baseOrder.push(key);
+    if (baseOrder.length > BASES_KEPT) delete bases[baseOrder.shift()];
+    jobs.push(base);
+    runJobs();
+    return base;
+  }
+
+  function paintPiece(base, piece) {
+    var ctx = base.ctx;
+    ctx.beginPath();
+    piece.features.forEach(function (f) { base.path(f); });
+    ctx.fillStyle = piece.fill;
+    ctx.fill();
+    ctx.strokeStyle = piece.stroke;
+    ctx.stroke();
+  }
+
+  // Paint pieces while the phone has idle time, one background after another.
+  function runJobs() {
+    if (jobsRunning) return;
+    jobsRunning = true;
+    whenIdle(function step(deadline) {
+      do {
+        var base = jobs[0];
+        if (!base) break;
+        paintPiece(base, base.pieces.shift());
+        if (!base.pieces.length) {
+          jobs.shift();
+          base.ready = true;
+          base.waiting.splice(0).forEach(function (fn) { fn(); });
+        }
+      } while (jobs.length && deadline && deadline.timeRemaining && deadline.timeRemaining() > 8);
+      if (jobs.length) whenIdle(step);
+      else jobsRunning = false;
+    });
+  }
+
+  // Start painting a continent background ahead of time (e.g. when a list opens).
+  function warm(country, W, H) {
+    baseFor(country, W, H, window.devicePixelRatio || 1, themeColors());
+  }
+
+  // The map painted into a canvas as a plain image: the continent background
+  // (painted once and reused), with only the country itself drawn on top.
+  // A finished image also costs the phone almost nothing to move.
+  // Returns false if the background is not ready yet; whenReady is then
+  // called once it is.
+  function paint(canvas, country, W, H, whenReady) {
+    var ratio = window.devicePixelRatio || 1;
+    var color = themeColors();
+    var base = baseFor(country, W, H, ratio, color);
+    if (!base.ready) {
+      if (whenReady) base.waiting.push(whenReady);
+      return false;
+    }
+    canvas.width = base.canvas.width;
+    canvas.height = base.canvas.height;
+    var ctx = canvas.getContext("2d");
+    ctx.drawImage(base.canvas, 0, 0);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    var projection = projectionFor(country, W, H);
+    var path = d3.geoPath(projection, ctx);
+    var target = byId[country.id];
+
+    var red = color("--map-target");
+    if (target) {
+      ctx.beginPath();
+      path(target);
+      if (d3.geoPath(projection).area(target) < SMALL) {
+        // Glow under a bold outline, as on the quiz map.
+        ctx.globalAlpha = 0.45;
+        ctx.strokeStyle = red;
+        ctx.lineWidth = 22;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = red;
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = red;
+        ctx.fill();
+        ctx.strokeStyle = color("--map-border");
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      }
+    } else if (country.ll) {
+      var p = projection(country.ll);
+      ctx.fillStyle = red;
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], 12, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], 2.5, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+    return true;
+  }
+
+  return { load: load, ready: ready, svg: svg, paint: paint, warm: warm };
 })();
 
 // Draw a country's continent map into el at exactly el's size. Skipped when
@@ -612,10 +795,41 @@ var learn = (function () {
   // never interrupts a swipe. Once a swipe settles, the nearest cards are
   // prepared one at a time (so the next ones are ready before they are
   // reached), and maps far from the current card are dropped.
-  var KEEP = 3;          // cards on each side of the current one that keep their map
+  var KEEP = 4;          // cards on each side of the current one that keep their map
   var SETTLE_MS = 180;   // how long scrolling must pause before preparing
   var settleTimer = null;
-  var prepTimer = null;
+  var prepTask = null;
+  // Run work when the phone is idle (falls back to a short timer).
+  var whenIdle = window.requestIdleCallback ?
+    function (fn) { return window.requestIdleCallback(fn, { timeout: 300 }); } :
+    function (fn) { return setTimeout(fn, 30); };
+  var cancelIdle = window.cancelIdleCallback ?
+    function (id) { window.cancelIdleCallback(id); } :
+    function (id) { clearTimeout(id); };
+  var darkTheme = window.matchMedia("(prefers-color-scheme: dark)");
+
+  // Paint card i's map as an image, unless it is already painted at this size
+  // and in this theme. If its continent background is still being prepared,
+  // the card is painted when it is ready (if it is still near the screen).
+  function paintMap(i) {
+    if (!geo.ready()) {
+      geo.load().then(function () {
+        if (geo.ready()) prepareNearby();
+      });
+      return;
+    }
+    var mapEl = cards[i].querySelector(".lc-map");
+    var w = mapEl.clientWidth;
+    var h = mapEl.clientHeight;
+    if (!w || !h) return;
+    var key = list[i].code + ":" + w + "x" + h + ":" + (darkTheme.matches ? "dark" : "light");
+    if (mapEl.dataset.drawn === key) return;
+    var canvas = mapEl.querySelector("canvas") || mapEl.appendChild(document.createElement("canvas"));
+    var painted = geo.paint(canvas, list[i], w, h, function () {
+      if (Math.abs(i - current) <= KEEP) paintMap(i);
+    });
+    if (painted) mapEl.dataset.drawn = key;
+  }
 
   function prepare(i) {
     var el = cards[i];
@@ -625,11 +839,29 @@ var learn = (function () {
       img.decoding = "async";
       setFlag(img, list[i], 640);
     }
-    drawCountryMap(el.querySelector(".lc-map"), list[i]);
+    paintMap(i);
   }
 
+  // Start painting every continent background the open list needs, in the
+  // order they come up from the current card on.
+  function warmBackgrounds() {
+    if (!geo.ready() || !cards.length) return;
+    var mapEl = cards[current].querySelector(".lc-map");
+    var w = mapEl.clientWidth;
+    var h = mapEl.clientHeight;
+    if (!w || !h) return;
+    var seen = {};
+    list.slice(current).concat(list.slice(0, current)).forEach(function (c) {
+      if (seen[c.view]) return;
+      seen[c.view] = true;
+      geo.warm(c, w, h);
+    });
+  }
+
+  // A queue of cards around the current one, prepared one at a time in the
+  // background: the current card, then the next ones, then the previous.
   function prepareNearby() {
-    clearTimeout(prepTimer);
+    cancelIdle(prepTask);
     cards.forEach(function (el, i) {
       var mapEl = el.querySelector(".lc-map");
       if (Math.abs(i - current) > KEEP && mapEl.dataset.drawn) {
@@ -637,19 +869,27 @@ var learn = (function () {
         delete mapEl.dataset.drawn;
       }
     });
-    var queue = [current, current + 1, current - 1, current + 2, current - 2];
+    var queue = [current, current + 1, current + 2, current - 1, current + 3, current - 2];
     (function step() {
       if (!queue.length) return;
       prepare(queue.shift());
-      prepTimer = setTimeout(step, 30);
+      prepTask = whenIdle(step);
     })();
+    warmBackgrounds();
   }
 
   // Called on every scroll event: wait until the swipe has settled.
   function settleLater() {
     clearTimeout(settleTimer);
-    clearTimeout(prepTimer);
+    cancelIdle(prepTask);
     settleTimer = setTimeout(prepareNearby, SETTLE_MS);
+  }
+
+  // Repaint in the new colours when the phone switches light/dark theme.
+  if (darkTheme.addEventListener) {
+    darkTheme.addEventListener("change", function () {
+      if (cards.length) prepareNearby();
+    });
   }
 
   function build() {

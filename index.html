@@ -302,6 +302,7 @@
       color: var(--star);
     }
 
+    /* Ocean colour shows while a map is still being painted. */
     .map {
       position: relative;
       flex: 1 1 0;
@@ -309,9 +310,11 @@
       width: 100%;
       border-radius: 12px;
       overflow: hidden;
+      background: var(--map-ocean);
     }
 
-    .map svg {
+    .map svg,
+    .map canvas {
       position: absolute;
       inset: 0;
       width: 100%;
@@ -729,9 +732,9 @@
     <div id="cards-scroll"></div>
   </section>
 
-  <script src="countries.js?v=22"></script>
-  <script src="facts.js?v=22"></script>
-  <script src="vendor/geo.min.js?v=22"></script>
-  <script src="app.js?v=22"></script>
+  <script src="countries.js?v=24"></script>
+  <script src="facts.js?v=24"></script>
+  <script src="vendor/geo.min.js?v=24"></script>
+  <script src="app.js?v=24"></script>
 </body>
 </html>
