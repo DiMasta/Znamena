@@ -537,23 +537,30 @@
       color: var(--text);
       font-size: 15px;
       line-height: 1.4;
-      text-align: left;
+      text-align: center;
     }
 
     .lc-fact::before {
-      content: "💡 ";
+      content: "💡💡💡";
+      display: block;
+      margin-bottom: 4px;
+      font-size: 18px;
+      letter-spacing: 6px;
     }
 
     /* Position in the list, shown in the control bar next to the buttons. */
+    /* Fixed width with even-width digits, so the bar never shifts as the
+       number changes (e.g. 9/45 to 10/45). */
     .ctrl-label {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 58px;
+      width: 84px;
       height: 48px;
       font-size: 17px;
       font-weight: 600;
       letter-spacing: 1px;
+      font-variant-numeric: tabular-nums;
       color: var(--muted);
     }
 
@@ -598,10 +605,12 @@
         font-size: 15px;
       }
 
+      /* The right padding clears the button column, which here also holds
+         the wider position counter. */
       .lcard {
         flex-direction: row;
         align-items: stretch;
-        padding: 12px calc(84px + env(safe-area-inset-right, 0px)) 12px calc(16px + env(safe-area-inset-left, 0px));
+        padding: 12px calc(108px + env(safe-area-inset-right, 0px)) 12px calc(16px + env(safe-area-inset-left, 0px));
       }
 
       .lc-info {
@@ -720,9 +729,9 @@
     <div id="cards-scroll"></div>
   </section>
 
-  <script src="countries.js?v=21"></script>
-  <script src="facts.js?v=21"></script>
-  <script src="vendor/geo.min.js?v=21"></script>
-  <script src="app.js?v=21"></script>
+  <script src="countries.js?v=22"></script>
+  <script src="facts.js?v=22"></script>
+  <script src="vendor/geo.min.js?v=22"></script>
+  <script src="app.js?v=22"></script>
 </body>
 </html>

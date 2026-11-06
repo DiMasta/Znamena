@@ -608,33 +608,55 @@ var learn = (function () {
     return el;
   }
 
-  // Flags and maps are loaded only for cards near the screen; maps of cards
-  // that scroll far away are dropped again to keep the page light.
-  var nearby = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      var i = cards.indexOf(entry.target);
-      if (i < 0) return;
-      var mapEl = entry.target.querySelector(".lc-map");
-      if (entry.isIntersecting) {
-        var img = entry.target.querySelector("img");
-        if (!img.getAttribute("src")) setFlag(img, list[i], 640);
-        drawCountryMap(mapEl, list[i]);
-      } else {
+  // Flags and maps are prepared only while the cards stand still, so drawing
+  // never interrupts a swipe. Once a swipe settles, the nearest cards are
+  // prepared one at a time (so the next ones are ready before they are
+  // reached), and maps far from the current card are dropped.
+  var KEEP = 3;          // cards on each side of the current one that keep their map
+  var SETTLE_MS = 180;   // how long scrolling must pause before preparing
+  var settleTimer = null;
+  var prepTimer = null;
+
+  function prepare(i) {
+    var el = cards[i];
+    if (!el) return;
+    var img = el.querySelector("img");
+    if (!img.getAttribute("src")) {
+      img.decoding = "async";
+      setFlag(img, list[i], 640);
+    }
+    drawCountryMap(el.querySelector(".lc-map"), list[i]);
+  }
+
+  function prepareNearby() {
+    clearTimeout(prepTimer);
+    cards.forEach(function (el, i) {
+      var mapEl = el.querySelector(".lc-map");
+      if (Math.abs(i - current) > KEEP && mapEl.dataset.drawn) {
         mapEl.innerHTML = "";
         delete mapEl.dataset.drawn;
       }
     });
-  }, { root: scrollEl, rootMargin: "100% 0px" });
+    var queue = [current, current + 1, current - 1, current + 2, current - 2];
+    (function step() {
+      if (!queue.length) return;
+      prepare(queue.shift());
+      prepTimer = setTimeout(step, 30);
+    })();
+  }
+
+  // Called on every scroll event: wait until the swipe has settled.
+  function settleLater() {
+    clearTimeout(settleTimer);
+    clearTimeout(prepTimer);
+    settleTimer = setTimeout(prepareNearby, SETTLE_MS);
+  }
 
   function build() {
-    nearby.disconnect();
     scrollEl.innerHTML = "";
     list = countriesFor(state.list);
     cards = list.map(makeCard);
-    cards.forEach(function (el) {
-      scrollEl.appendChild(el);
-      nearby.observe(el);
-    });
+    cards.forEach(function (el) { scrollEl.appendChild(el); });
     builtFor = state.list;
   }
 
@@ -657,6 +679,7 @@ var learn = (function () {
   scrollEl.addEventListener("scroll", function () {
     var h = scrollEl.clientHeight;
     if (!h || !cards.length) return;
+    settleLater();
     var i = Math.max(0, Math.min(Math.round(scrollEl.scrollTop / h), cards.length - 1));
     if (i === current) return;
     current = i;
@@ -665,14 +688,16 @@ var learn = (function () {
     save();
   });
 
-  // Keep the same card in place when the phone is rotated.
+  // Keep the same card in place when the phone is rotated. Only a real change
+  // of size counts, so nothing is ever moved in the middle of a swipe.
+  var lastSize = "";
   if (window.ResizeObserver) {
     new ResizeObserver(function () {
-      if (!cards.length || !scrollEl.clientHeight) return;
+      var size = scrollEl.clientWidth + "x" + scrollEl.clientHeight;
+      if (!cards.length || !scrollEl.clientHeight || size === lastSize) return;
+      lastSize = size;
       jumpTo(current);
-      for (var i = current - 1; i <= current + 1; i++) {
-        if (cards[i]) drawCountryMap(cards[i].querySelector(".lc-map"), list[i]);
-      }
+      prepareNearby();
     }).observe(scrollEl);
   }
 
@@ -699,6 +724,7 @@ var learn = (function () {
     geo.load();
     if (builtFor !== state.list) build();
     jumpTo(state.pos[state.list] || 0);
+    prepareNearby();
     return true;
   }
 
