@@ -345,6 +345,16 @@
     }
 
     /* Small countries: a bold red outline makes tiny islands visible... */
+    /* Silhouette question: the country's shape alone, on the page background. */
+    .map.shape {
+      background: none;
+      border-radius: 0;
+    }
+
+    .m-shape {
+      fill: var(--btn-text);
+    }
+
     .m-target.m-small {
       stroke: var(--map-target);
       stroke-width: 2.5;
@@ -732,9 +742,9 @@
     <div id="cards-scroll"></div>
   </section>
 
-  <script src="countries.js?v=24"></script>
-  <script src="facts.js?v=24"></script>
-  <script src="vendor/geo.min.js?v=24"></script>
-  <script src="app.js?v=24"></script>
+  <script src="countries.js?v=25"></script>
+  <script src="facts.js?v=25"></script>
+  <script src="vendor/geo.min.js?v=25"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>

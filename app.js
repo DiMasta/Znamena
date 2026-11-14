@@ -148,6 +148,8 @@ var geo = (function () {
   };
   // Map shapes whose continent can't be guessed from the nearest country.
   var REGION_OVERRIDES = { "304": "americas", "010": "" };  // Greenland, Antarctica
+  // Map shapes without a code of their own, by name -> the country they are part of.
+  var PART_OF = { "Somaliland": "706", "N. Cyprus": "196" };
 
   var features = null;  // all map shapes, once loaded
   var byId = {};        // ISO numeric id -> shape
@@ -160,8 +162,11 @@ var geo = (function () {
         .then(function (topo) {
           // Shapes sharing a code (Australia and its Ashmore and Cartier
           // Islands) are merged into one, so the whole country is highlighted.
+          // Regions the map data draws apart are joined to the country they
+          // belong to under internationally recognised borders.
           features = [];
           topojson.feature(topo, topo.objects.countries).features.forEach(function (f) {
+            if (!f.id && PART_OF[f.properties.name]) f.id = PART_OF[f.properties.name];
             var same = f.id && byId[f.id];
             if (same) {
               same.geometry = { type: "MultiPolygon", coordinates: polygons(same.geometry).concat(polygons(f.geometry)) };
@@ -459,28 +464,120 @@ var geo = (function () {
     return true;
   }
 
-  return { load: load, ready: ready, svg: svg, paint: paint, warm: warm };
+  // ---- Silhouettes: the country's own shape, without its surroundings ----
+
+  // Pieces of land within this distance of each other count as one country
+  // shape; farther ones are left out (e.g. France's overseas territories,
+  // Hawaii, Easter Island), so they don't shrink the main shape to a dot.
+  var LINK_KM = 500;
+  // Silhouettes that would be unreadable are not asked about: scattered
+  // specks of atolls (too little land in the frame) and micro-states the
+  // map draws as a crude blob (too few points).
+  var MIN_FILL = 0.02;
+  var MIN_POINTS = 25;
+  var mains = {};
+
+  // Bounding box of a polygon, with longitudes taken around refLon so that
+  // countries crossing the 180° meridian are not split apart.
+  function boxOf(polygon, refLon) {
+    var b = { w: Infinity, e: -Infinity, s: Infinity, n: -Infinity };
+    polygon[0].forEach(function (pt) {
+      var lon = pt[0];
+      while (lon - refLon > 180) lon -= 360;
+      while (lon - refLon < -180) lon += 360;
+      b.w = Math.min(b.w, lon);
+      b.e = Math.max(b.e, lon);
+      b.s = Math.min(b.s, pt[1]);
+      b.n = Math.max(b.n, pt[1]);
+    });
+    return b;
+  }
+
+  function gapKm(a, b) {
+    var dLat = Math.max(0, a.s - b.n, b.s - a.n);
+    var dLon = Math.max(0, a.w - b.e, b.w - a.e);
+    var midLat = (a.s + a.n + b.s + b.n) / 4 * Math.PI / 180;
+    return Math.sqrt(Math.pow(dLat * 111, 2) + Math.pow(dLon * 111 * Math.cos(midLat), 2));
+  }
+
+  // The largest piece of land plus every piece linked to it by short gaps,
+  // or null when the country has no readable silhouette.
+  function mainPart(country) {
+    if (mains.hasOwnProperty(country.code)) return mains[country.code];
+    var result = null;
+    var f = byId[country.id];
+    if (f) {
+      var polys = polygons(f.geometry);
+      var areas = polys.map(function (p) { return d3.geoArea({ type: "Polygon", coordinates: p }); });
+      var main = areas.indexOf(Math.max.apply(null, areas));
+      var refLon = d3.geoCentroid({ type: "Polygon", coordinates: polys[main] })[0];
+      var boxes = polys.map(function (p) { return boxOf(p, refLon); });
+      var inside = [main];
+      var taken = {};
+      taken[main] = true;
+      for (var k = 0; k < inside.length; k++) {
+        boxes.forEach(function (b, j) {
+          if (!taken[j] && gapKm(boxes[inside[k]], b) <= LINK_KM) {
+            taken[j] = true;
+            inside.push(j);
+          }
+        });
+      }
+      var shape = { type: "MultiPolygon", coordinates: inside.map(function (j) { return polys[j]; }) };
+      var path = d3.geoPath(shapeProjection(shape, 400, 300));
+      if (path.area(shape) / (400 * 300) >= MIN_FILL && countPoints(shape.coordinates) >= MIN_POINTS) {
+        result = shape;
+      }
+    }
+    mains[country.code] = result;
+    return result;
+  }
+
+  function shapeProjection(shape, W, H) {
+    var c = d3.geoCentroid(shape);
+    return d3.geoAzimuthalEqualArea()
+      .rotate([-c[0], -c[1]])
+      .fitExtent([[12, 12], [W - 12, H - 12]], shape);
+  }
+
+  function hasShape(country) {
+    return ready() && mainPart(country) !== null;
+  }
+
+  // SVG of the country's silhouette alone, filling W x H.
+  function shapeSvg(country, W, H) {
+    var shape = mainPart(country);
+    if (!shape) return "";
+    var path = d3.geoPath(shapeProjection(shape, W, H));
+    if (path.digits) path.digits(1);
+    return '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg">' +
+      '<path class="m-shape" d="' + path(shape) + '"/></svg>';
+  }
+
+  return { load: load, ready: ready, svg: svg, paint: paint, warm: warm, hasShape: hasShape, shapeSvg: shapeSvg };
 })();
 
-// Draw a country's continent map into el at exactly el's size. Skipped when
-// that country is already drawn at that size; waits for the map data if needed.
-function drawCountryMap(el, country) {
+// Draw a country's continent map (or, with kind "shape", its silhouette) into
+// el at exactly el's size. Skipped when it is already drawn at that size;
+// waits for the map data if needed.
+function drawCountryMap(el, country, kind) {
   if (!el || !country) return;
-  el.dataset.want = country.code;
+  var want = (kind || "map") + ":" + country.code;
+  el.dataset.want = want;
   if (!geo.ready()) {
     geo.load().then(function () {
       // Only if the element still wants this country (not a later one).
-      if (geo.ready() && el.dataset.want === country.code) drawCountryMap(el, country);
+      if (geo.ready() && el.dataset.want === want) drawCountryMap(el, country, kind);
     });
     return;
   }
   var w = el.clientWidth;
   var h = el.clientHeight;
   if (!w || !h) return;
-  var key = country.code + ":" + w + "x" + h;
+  var key = want + ":" + w + "x" + h;
   if (el.dataset.drawn === key) return;
   el.dataset.drawn = key;
-  el.innerHTML = geo.svg(country, w, h);
+  el.innerHTML = kind === "shape" ? geo.shapeSvg(country, w, h) : geo.svg(country, w, h);
 }
 
 // ---- Master: quiz, pick the right flag out of four ----
@@ -525,7 +622,7 @@ var master = (function () {
     COUNTRIES.forEach(function (c) { byCode[c.code] = c; });
     var out = [];
     saved.forEach(function (s) {
-      if (!s || !byCode[s.t] || ["name", "capital", "map"].indexOf(s.k) < 0) return;
+      if (!s || !byCode[s.t] || ["name", "capital", "map", "shape"].indexOf(s.k) < 0) return;
       if (!Array.isArray(s.o) || s.o.length !== 4 || s.o.indexOf(s.t) < 0) return;
       if (!s.o.every(function (code) { return byCode[code]; })) return;
       out.push({
@@ -579,6 +676,7 @@ var master = (function () {
     var kinds = ["name"];
     if (!capitalIsTrivial(target)) kinds.push("capital");
     if (geo.ready()) kinds.push("map");
+    if (geo.hasShape(target)) kinds.push("shape");
     return {
       target: target,
       kind: kinds[Math.floor(Math.random() * kinds.length)],
@@ -588,13 +686,16 @@ var master = (function () {
   }
 
   function drawMap() {
-    if (question && question.kind === "map") drawCountryMap(document.getElementById("map"), question.target);
+    if (question && (question.kind === "map" || question.kind === "shape")) {
+      drawCountryMap(document.getElementById("map"), question.target, question.kind);
+    }
   }
 
   function renderPrompt() {
     var t = question.target;
-    if (question.kind === "map") {
-      promptEl.innerHTML = '<div id="map" class="map"></div>';
+    if (question.kind === "map" || question.kind === "shape") {
+      // A silhouette is shown on its own, without the ocean background.
+      promptEl.innerHTML = '<div id="map" class="map' + (question.kind === "shape" ? " shape" : "") + '"></div>';
       drawMap();
       return;
     }
