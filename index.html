@@ -561,6 +561,127 @@
       letter-spacing: 6px;
     }
 
+    /* ---- Progress page: only the area below the button bar scrolls, so
+       nothing slides under the buttons ---- */
+    #stats {
+      justify-content: flex-start;
+      padding: var(--top) 16px 0;
+    }
+
+    .stats {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow-y: auto;
+      width: 100%;
+      max-width: 520px;
+      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+      text-align: left;
+    }
+
+    .stats .menu-title {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    .stats h2 {
+      margin: 26px 0 10px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--tag);
+    }
+
+    .stat-hero {
+      text-align: center;
+      padding: 16px;
+      border-radius: 14px;
+      background: var(--btn-bg);
+    }
+
+    .stat-big {
+      font-size: 48px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .stat-big small {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .stat-row {
+      margin-bottom: 14px;
+    }
+
+    .stat-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bar {
+      height: 10px;
+      margin: 6px 0 4px;
+      border-radius: 5px;
+      background: var(--btn-bg);
+      overflow: hidden;
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: 5px;
+      background: var(--good-border);
+    }
+
+    .stat-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .stat-list {
+      list-style: none;
+    }
+
+    .stat-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .stat-list img {
+      width: 36px;
+      height: 24px;
+      object-fit: contain;
+    }
+
+    .stat-list span {
+      flex: 1;
+    }
+
+    .stat-list b {
+      color: var(--bad-border);
+    }
+
+    .stat-reset {
+      display: block;
+      width: 100%;
+      margin-top: 28px;
+      font-size: 16px;
+      padding: 14px;
+      border-color: var(--bad-border);
+      color: var(--bad-border);
+    }
+
     /* Position in the list, shown in the control bar next to the buttons. */
     /* Fixed width with even-width digits, so the bar never shifts as the
        number changes (e.g. 9/45 to 10/45). */
@@ -599,6 +720,26 @@
       #master,
       #learn {
         padding: 12px calc(84px + env(safe-area-inset-right, 0px)) 12px calc(16px + env(safe-area-inset-left, 0px));
+      }
+
+      /* Home menu: buttons in two columns so all four fit on the short screen. */
+      #menu .menu-title {
+        margin-bottom: 16px;
+      }
+
+      #menu .menu-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        max-width: 560px;
+        gap: 12px;
+      }
+
+      #menu .menu-btn {
+        padding: 14px 16px;
+      }
+
+      #stats {
+        padding: 12px calc(84px + env(safe-area-inset-right, 0px)) 0 calc(16px + env(safe-area-inset-left, 0px));
       }
 
       /* Learn: list buttons in one wide grid; each card has its details on
@@ -682,6 +823,7 @@
       <button class="menu-btn" type="button" data-go="classic">Класически</button>
       <button class="menu-btn" type="button" data-go="master">Майстор</button>
       <button class="menu-btn" type="button" data-go="learn">Учи</button>
+      <button class="menu-btn" type="button" data-go="stats">Прогрес</button>
     </div>
   </section>
 
@@ -742,9 +884,17 @@
     <div id="cards-scroll"></div>
   </section>
 
-  <script src="countries.js?v=25"></script>
-  <script src="facts.js?v=25"></script>
-  <script src="vendor/geo.min.js?v=25"></script>
-  <script src="app.js?v=25"></script>
+  <!-- Progress: what has been learned so far -->
+  <section id="stats" class="screen hidden">
+    <div class="controls">
+      <button class="ctrl" type="button" data-go="menu" aria-label="Меню">⌂</button>
+    </div>
+    <div id="stats-body" class="stats"></div>
+  </section>
+
+  <script src="countries.js?v=26"></script>
+  <script src="facts.js?v=26"></script>
+  <script src="vendor/geo.min.js?v=26"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>

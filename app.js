@@ -62,6 +62,77 @@ function bindButton(id, action) {
   });
 }
 
+// The capital question is pointless when the capital shares the country's name.
+function capitalIsTrivial(country) {
+  var n = country.name.toLowerCase();
+  var c = country.capital.toLowerCase();
+  return n.indexOf(c) === 0 || c.indexOf(n) === 0;
+}
+
+// The continent a country is learned and counted under.
+function continentOf(c) {
+  if (c.view === "northamerica" || c.view === "caribbean") return "northamerica";
+  if (c.view === "southamerica") return "southamerica";
+  return c.region;
+}
+
+// ---- Progress: recorded quietly while playing ----
+
+var tracker = (function () {
+  var STORAGE_KEY = "flagsGame.stats.v1";
+  var KINDS = ["name", "capital", "map", "shape"];
+  var data;
+
+  function fresh() {
+    var d = { answers: {}, seen: { classic: {}, learn: {} } };
+    KINDS.forEach(function (k) { d.answers[k] = {}; });
+    return d;
+  }
+
+  // Saved data, with anything missing or malformed replaced by empty records.
+  function load() {
+    var saved = loadState(STORAGE_KEY);
+    var d = fresh();
+    if (!saved || typeof saved !== "object") return d;
+    KINDS.forEach(function (k) {
+      if (saved.answers && saved.answers[k] && typeof saved.answers[k] === "object") d.answers[k] = saved.answers[k];
+    });
+    ["classic", "learn"].forEach(function (w) {
+      if (saved.seen && saved.seen[w] && typeof saved.seen[w] === "object") d.seen[w] = saved.seen[w];
+    });
+    return d;
+  }
+
+  data = load();
+
+  function save() {
+    saveState(STORAGE_KEY, data);
+  }
+
+  // One Master answer: per question type and country, [right, wrong] counts.
+  function answer(kind, code, right) {
+    if (!data.answers[kind]) return;
+    var counts = data.answers[kind][code] || [0, 0];
+    counts[right ? 0 : 1]++;
+    data.answers[kind][code] = counts;
+    save();
+  }
+
+  // A flag seen in Classic or a card seen in Learn.
+  function seen(where, code) {
+    if (data.seen[where][code]) return;
+    data.seen[where][code] = 1;
+    save();
+  }
+
+  function reset() {
+    data = fresh();
+    save();
+  }
+
+  return { KINDS: KINDS, answer: answer, seen: seen, reset: reset, data: function () { return data; } };
+})();
+
 // ---- Classic: one flag at a time, shuffled, with saved progress ----
 
 var classic = (function () {
@@ -78,6 +149,7 @@ var classic = (function () {
     nameEl.textContent = country.name;
     nameEl.classList.toggle("long", country.name.length > 20);
     setFlag(flagEl, country, 640);
+    tracker.seen("classic", country.code);
     counterEl.textContent = (pos + 1) + "/" + COUNTRIES.length;
     saveState(STORAGE_KEY, { deck: deck, pos: pos });
   }
@@ -635,12 +707,6 @@ var master = (function () {
     return out.slice(-HISTORY_MAX);
   }
 
-  // The capital question is pointless when the capital shares the country's name.
-  function capitalIsTrivial(country) {
-    var n = country.name.toLowerCase();
-    var c = country.capital.toLowerCase();
-    return n.indexOf(c) === 0 || c.indexOf(n) === 0;
-  }
 
   // Three wrong answers: flags that look like the right one, chosen at random
   // among its five closest look-alikes so the same three don't always appear.
@@ -751,6 +817,7 @@ var master = (function () {
     question.choice = country;
     showResult();
     save();
+    tracker.answer(question.kind, question.target.code, country === question.target);
     if (country === question.target) advanceTimer = setTimeout(next, 1200);
   }
 
@@ -850,12 +917,6 @@ var learn = (function () {
   var cards = [];     // their card elements
   var builtFor = null;
   var current = 0;
-
-  function continentOf(c) {
-    if (c.view === "northamerica" || c.view === "caribbean") return "northamerica";
-    if (c.view === "southamerica") return "southamerica";
-    return c.region;
-  }
 
   // A continent alphabetically, all countries alphabetically, or all by area.
   function countriesFor(key) {
@@ -1005,8 +1066,10 @@ var learn = (function () {
     saveState(STORAGE_KEY, state);
   }
 
+  // Show the position in the list and count the card as seen.
   function showPos() {
     posEl.textContent = (current + 1) + "/" + list.length;
+    tracker.seen("learn", list[current].code);
   }
 
   // Put the given card on screen without animation.
@@ -1078,12 +1141,124 @@ var learn = (function () {
   return { enterCards: enterCards };
 })();
 
+// ---- Progress page ----
+
+var progress = (function () {
+  var bodyEl = document.getElementById("stats-body");
+  var KIND_LABELS = {
+    name: "Държава (по име)",
+    capital: "Столица",
+    map: "На картата",
+    shape: "Силует"
+  };
+  var CONTINENTS = [
+    ["europe", "Европа"],
+    ["asia", "Азия"],
+    ["africa", "Африка"],
+    ["northamerica", "Северна Америка"],
+    ["southamerica", "Южна Америка"],
+    ["oceania", "Океания"]
+  ];
+
+  function percent(part, whole) {
+    return whole ? Math.round(part / whole * 100) : 0;
+  }
+
+  // A labelled progress bar: "label ... part / whole".
+  function bar(label, part, whole, sub) {
+    var total = whole === null ? "…" : whole;
+    return '<div class="stat-row">' +
+      '<div class="stat-head"><span>' + label + '</span><span>' + part + " / " + total + "</span></div>" +
+      '<div class="bar"><span style="width:' + (whole ? percent(part, whole) : 0) + '%"></span></div>' +
+      (sub ? '<div class="stat-sub">' + sub + "</div>" : "") +
+      "</div>";
+  }
+
+  function rightWrong(right, wrong) {
+    if (!right && !wrong) return "Още няма отговори";
+    return "Верни: " + right + " · Грешни: " + wrong + " · Точност: " + percent(right, right + wrong) + "%";
+  }
+
+  function render() {
+    var d = tracker.data();
+    var shapesKnown = geo.ready();
+    if (!shapesKnown) geo.load().then(function () { if (geo.ready()) render(); });
+    var guessedAny = {};
+    var missed = {};
+    var allRight = 0;
+    var allWrong = 0;
+
+    var kindRows = tracker.KINDS.map(function (kind) {
+      var rec = d.answers[kind];
+      var right = 0;
+      var wrong = 0;
+      var guessed = 0;
+      Object.keys(rec).forEach(function (code) {
+        right += rec[code][0];
+        wrong += rec[code][1];
+        if (rec[code][0] > 0) {
+          guessed++;
+          guessedAny[code] = true;
+        }
+        if (rec[code][1] > 0) missed[code] = (missed[code] || 0) + rec[code][1];
+      });
+      allRight += right;
+      allWrong += wrong;
+      // Only countries that can get this type of question count towards it.
+      var whole = COUNTRIES.length;
+      if (kind === "capital") whole = COUNTRIES.filter(function (c) { return !capitalIsTrivial(c); }).length;
+      if (kind === "shape") whole = shapesKnown ? COUNTRIES.filter(function (c) { return geo.hasShape(c); }).length : null;
+      return bar(KIND_LABELS[kind], guessed, whole, rightWrong(right, wrong));
+    }).join("");
+
+    var guessedCount = Object.keys(guessedAny).length;
+    var html =
+      '<h1 class="menu-title">Прогрес</h1>' +
+      '<div class="stat-hero"><div class="stat-big">' + guessedCount + ' <small>/ ' + COUNTRIES.length + '</small></div>' +
+      '<div class="stat-sub">държави познати поне веднъж в „Майстор“</div>' +
+      '<div class="stat-sub">' + rightWrong(allRight, allWrong) + "</div></div>" +
+      "<h2>Майстор по вид въпрос</h2>" + kindRows +
+      "<h2>По континенти</h2>" +
+      CONTINENTS.map(function (cont) {
+        var inCont = COUNTRIES.filter(function (c) { return continentOf(c) === cont[0]; });
+        var got = inCont.filter(function (c) { return guessedAny[c.code]; }).length;
+        return bar(cont[1], got, inCont.length);
+      }).join("");
+
+    // The countries answered wrongly most often, in any type of question.
+    var hardest = Object.keys(missed).sort(function (a, b) { return missed[b] - missed[a]; }).slice(0, 5);
+    if (hardest.length) {
+      html += "<h2>Най-често бъркани</h2><ul class=\"stat-list\">" +
+        hardest.map(function (code) {
+          var c = COUNTRIES.filter(function (x) { return x.code === code; })[0];
+          return '<li><img src="' + flagUrl(c, 80) + '" alt=""><span>' + c.name + "</span><b>× " + missed[code] + "</b></li>";
+        }).join("") + "</ul>";
+    }
+
+    html += "<h2>Разгледани</h2>" +
+      bar("Знамена в „Класически“", Object.keys(d.seen.classic).length, COUNTRIES.length) +
+      bar("Карти в „Учи“", Object.keys(d.seen.learn).length, COUNTRIES.length) +
+      '<button id="stats-reset" class="menu-btn stat-reset" type="button">Изчисти прогреса</button>';
+
+    bodyEl.innerHTML = html;
+    document.getElementById("stats-reset").addEventListener("click", function () {
+      if (window.confirm("Да изчистя ли целия прогрес? Това не може да се отмени.")) {
+        tracker.reset();
+        render();
+      }
+    });
+  }
+
+  return { render: render };
+})();
+
 var screens = {
   menu: document.getElementById("menu"),
   classic: document.getElementById("classic"),
   master: document.getElementById("master"),
   learn: document.getElementById("learn"),
-  cards: document.getElementById("cards")
+  cards: document.getElementById("cards"),
+  stats: document.getElementById("stats")
 };
 
 var SCREEN_KEY = "flagsGame.screen";
@@ -1094,6 +1269,7 @@ function showScreen(name) {
     screens[key].classList.toggle("hidden", key !== name);
   }
   if (name === "master") master.enter();
+  if (name === "stats") progress.render();
   // Without a chosen list there are no cards to show: go to the Learn page.
   if (name === "cards" && !learn.enterCards()) return showScreen("learn");
   saveState(SCREEN_KEY, name);
