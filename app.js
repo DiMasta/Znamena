@@ -103,34 +103,44 @@ var tracker = (function () {
     return d;
   }
 
-  data = load();
-
-  function save() {
-    saveState(STORAGE_KEY, data);
+  // Every change starts from what is saved right now, not from a copy kept in
+  // memory: with the site open in several tabs, a tab that was opened earlier
+  // would otherwise write its old copy back over newer progress.
+  function update(change) {
+    data = load();
+    if (change(data) !== false) saveState(STORAGE_KEY, data);
   }
 
   // One Master answer: per question type and country, [right, wrong] counts.
   function answer(kind, code, right) {
-    if (!data.answers[kind]) return;
-    var counts = data.answers[kind][code] || [0, 0];
-    counts[right ? 0 : 1]++;
-    data.answers[kind][code] = counts;
-    save();
+    update(function (d) {
+      if (!d.answers[kind]) return false;
+      var counts = d.answers[kind][code] || [0, 0];
+      counts[right ? 0 : 1]++;
+      d.answers[kind][code] = counts;
+    });
   }
 
   // A flag seen in Classic or a card seen in Learn.
   function seen(where, code) {
-    if (data.seen[where][code]) return;
-    data.seen[where][code] = 1;
-    save();
+    update(function (d) {
+      if (d.seen[where][code]) return false;
+      d.seen[where][code] = 1;
+    });
   }
 
   function reset() {
     data = fresh();
-    save();
+    saveState(STORAGE_KEY, data);
   }
 
-  return { KINDS: KINDS, answer: answer, seen: seen, reset: reset, data: function () { return data; } };
+  // The latest saved progress (it may have changed in another tab).
+  function current() {
+    data = load();
+    return data;
+  }
+
+  return { KINDS: KINDS, answer: answer, seen: seen, reset: reset, data: current };
 })();
 
 // ---- Classic: one flag at a time, shuffled, with saved progress ----
@@ -1236,6 +1246,8 @@ var progress = (function () {
     }
 
     html += "<h2>Разгледани</h2>" +
+      '<div class="stat-sub stat-note">Различни знамена и карти, видени откакто се води прогресът. ' +
+      "Всеки кръг в „Класически“ разбърква знамената наново.</div>" +
       bar("Знамена в „Класически“", Object.keys(d.seen.classic).length, COUNTRIES.length) +
       bar("Карти в „Учи“", Object.keys(d.seen.learn).length, COUNTRIES.length) +
       '<button id="stats-reset" class="menu-btn stat-reset" type="button">Изчисти прогреса</button>';
