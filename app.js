@@ -121,11 +121,11 @@ var tracker = (function () {
     });
   }
 
-  // A flag seen in Classic or a card seen in Learn.
+  // A flag seen in Classic or a card seen in Learn: how many times, per country.
   function seen(where, code) {
     update(function (d) {
-      if (d.seen[where][code]) return false;
-      d.seen[where][code] = 1;
+      var times = d.seen[where][code];
+      d.seen[where][code] = (typeof times === "number" ? times : 0) + 1;
     });
   }
 
@@ -153,13 +153,14 @@ var classic = (function () {
   var deck = [];  // shuffled order of country indices for the current cycle
   var pos = 0;    // index in the deck of the flag currently on screen
 
-  // Draw the flag at the current position and save progress.
-  function render() {
+  // Draw the flag at the current position and save progress. Moving to a
+  // flag counts as a view; showing it again after a reload does not.
+  function render(isView) {
     var country = COUNTRIES[deck[pos]];
     nameEl.textContent = country.name;
     nameEl.classList.toggle("long", country.name.length > 20);
     setFlag(flagEl, country, 640);
-    tracker.seen("classic", country.code);
+    if (isView) tracker.seen("classic", country.code);
     counterEl.textContent = (pos + 1) + "/" + COUNTRIES.length;
     saveState(STORAGE_KEY, { deck: deck, pos: pos });
   }
@@ -172,20 +173,20 @@ var classic = (function () {
       deck = newDeck(deck[pos]);
       pos = 0;
     }
-    render();
+    render(true);
   }
 
   function prev() {
     if (pos > 0) {
       pos--;
-      render();
+      render(true);
     }
   }
 
   function restart() {
     deck = newDeck(deck[pos]);
     pos = 0;
-    render();
+    render(true);
   }
 
   bindButton("prev", prev);
@@ -1076,17 +1077,18 @@ var learn = (function () {
     saveState(STORAGE_KEY, state);
   }
 
-  // Show the position in the list and count the card as seen.
-  function showPos() {
+  // Show the position in the list; if the card was just reached (a swipe,
+  // opening the list, going back to the start), count it as a view.
+  function showPos(isView) {
     posEl.textContent = (current + 1) + "/" + list.length;
-    tracker.seen("learn", list[current].code);
+    if (isView) tracker.seen("learn", list[current].code);
   }
 
   // Put the given card on screen without animation.
-  function jumpTo(i) {
+  function jumpTo(i, isView) {
     current = Math.max(0, Math.min(i, cards.length - 1));
     scrollEl.scrollTop = current * scrollEl.clientHeight;
-    showPos();
+    showPos(isView);
   }
 
   // Follow the swipes: the card filling the screen is the current one.
@@ -1098,7 +1100,7 @@ var learn = (function () {
     if (i === current) return;
     current = i;
     state.pos[state.list] = i;
-    showPos();
+    showPos(true);
     save();
   });
 
@@ -1118,7 +1120,7 @@ var learn = (function () {
   // Back to the first card of the open list; other lists keep their place.
   bindButton("cards-reset", function () {
     state.pos[state.list] = 0;
-    jumpTo(0);
+    jumpTo(0, true);
     save();
   });
 
@@ -1129,6 +1131,8 @@ var learn = (function () {
       state.list = this.getAttribute("data-list");
       save();
       showScreen("cards");
+      // Opening a list shows its card: that is a view (reopening the site is not).
+      if (cards.length) tracker.seen("learn", list[current].code);
     });
   }
 
@@ -1184,9 +1188,18 @@ var progress = (function () {
       "</div>";
   }
 
+  // All answers given (repeats included), right, wrong and accuracy.
   function rightWrong(right, wrong) {
     if (!right && !wrong) return "Още няма отговори";
-    return "Верни: " + right + " · Грешни: " + wrong + " · Точност: " + percent(right, right + wrong) + "%";
+    return "Отговори: " + (right + wrong) + " · Верни: " + right + " · Грешни: " + wrong +
+      " · Точност: " + percent(right, right + wrong) + "%";
+  }
+
+  // Every view (repeats included) of a flag in Classic or a card in Learn.
+  function totalViews(seen) {
+    return Object.keys(seen).reduce(function (sum, code) {
+      return sum + (typeof seen[code] === "number" ? seen[code] : 1);
+    }, 0);
   }
 
   function render() {
@@ -1195,6 +1208,7 @@ var progress = (function () {
     if (!shapesKnown) geo.load().then(function () { if (geo.ready()) render(); });
     var guessedAny = {};
     var missed = {};
+    var byCountry = {};   // [right, wrong] per country, over all question types
     var allRight = 0;
     var allWrong = 0;
 
@@ -1206,6 +1220,8 @@ var progress = (function () {
       Object.keys(rec).forEach(function (code) {
         right += rec[code][0];
         wrong += rec[code][1];
+        var both = byCountry[code] || [0, 0];
+        byCountry[code] = [both[0] + rec[code][0], both[1] + rec[code][1]];
         if (rec[code][0] > 0) {
           guessed++;
           guessedAny[code] = true;
@@ -1232,7 +1248,14 @@ var progress = (function () {
       CONTINENTS.map(function (cont) {
         var inCont = COUNTRIES.filter(function (c) { return continentOf(c) === cont[0]; });
         var got = inCont.filter(function (c) { return guessedAny[c.code]; }).length;
-        return bar(cont[1], got, inCont.length);
+        var right = 0;
+        var wrong = 0;
+        inCont.forEach(function (c) {
+          if (!byCountry[c.code]) return;
+          right += byCountry[c.code][0];
+          wrong += byCountry[c.code][1];
+        });
+        return bar(cont[1], got, inCont.length, rightWrong(right, wrong));
       }).join("");
 
     // The countries answered wrongly most often, in any type of question.
@@ -1246,10 +1269,12 @@ var progress = (function () {
     }
 
     html += "<h2>Разгледани</h2>" +
-      '<div class="stat-sub stat-note">Различни знамена и карти, видени откакто се води прогресът. ' +
-      "Всеки кръг в „Класически“ разбърква знамената наново.</div>" +
-      bar("Знамена в „Класически“", Object.keys(d.seen.classic).length, COUNTRIES.length) +
-      bar("Карти в „Учи“", Object.keys(d.seen.learn).length, COUNTRIES.length) +
+      '<div class="stat-sub stat-note">Лентата показва различните знамена и карти, видени откакто се води ' +
+      "прогресът; „Общо видени“ брои и повторенията.</div>" +
+      bar("Знамена в „Класически“", Object.keys(d.seen.classic).length, COUNTRIES.length,
+        "Общо видени: " + totalViews(d.seen.classic)) +
+      bar("Карти в „Учи“", Object.keys(d.seen.learn).length, COUNTRIES.length,
+        "Общо видени: " + totalViews(d.seen.learn)) +
       '<button id="stats-reset" class="menu-btn stat-reset" type="button">Изчисти прогреса</button>';
 
     bodyEl.innerHTML = html;
